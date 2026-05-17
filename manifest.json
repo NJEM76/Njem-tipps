@@ -1,0 +1,27 @@
+{
+  "name": "NJEM Tipps",
+  "short_name": "NJEM Tipps",
+  "description": "Smart Betting Investor — Not Gambler",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#05110a",
+  "theme_color": "#00ff85",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "sports"],
+  "lang": "sw",
+  "scope": "/"
+}
