@@ -87,7 +87,7 @@
 import{createClient}from'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 const SUPA_URL='https://mhmcvvfoylbnwqfwioys.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1obWN2dmZveWxibndxZndpb3lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5Mzc3NDUsImV4cCI6MjA5NDUxMzc0NX0.DJx01EDheWCjpq2nkdK0aljTmf9irfTugPhn_fTXSWM';
-let GEMINI_KEY='';// Weka key yako: aistudio.google.com
+let GEMINI_KEY=localStorage.getItem('njem_gemini_key')||'';
 const sb=createClient(SUPA_URL,SUPA_KEY);
 const MAX_MATCHES=6;
 const LOSS_STREAK_LIMIT=3;
@@ -343,17 +343,32 @@ function analyzeRisk(matches){
 async function ocrImage(base64,mimeType){
   if(!GEMINI_KEY){toast('Weka Gemini API key kwenye Admin → Settings','err');return[];}
   try{
-    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:[{parts:[
-        {text:'Extract all matches from this betslip image. Return ONLY a JSON array: [{"teams":"TeamA vs TeamB","market":"1X2","pick":"1","odds":"1.85"}]. No explanation.'},
+    // Use Gemini 1.5 Flash via fetch with proper headers
+    const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+    const body={
+      contents:[{parts:[
+        {text:`You are a sports betting slip reader. Extract ALL matches from this betslip image.
+Return ONLY a valid JSON array, no markdown, no explanation:
+[{"teams":"Team A vs Team B","market":"Double Chance","pick":"1X","odds":"1.75"}]
+If you cannot read clearly, make your best guess. Always return valid JSON array.`},
         {inline_data:{mime_type:mimeType,data:base64}}
-      ]}]})
-    });
+      ]}],
+      generationConfig:{temperature:0.1,maxOutputTokens:1000}
+    };
+    const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!res.ok){const err=await res.json();toast('Gemini error: '+(err.error?.message||res.status),'err');return[];}
     const data=await res.json();
     const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'[]';
-    return JSON.parse(text.replace(/```json|```/g,'').trim());
-  }catch(e){toast('OCR imeshindwa','err');return[];}
+    const clean=text.replace(/```json|```|\n/g,'').trim();
+    // Find JSON array in response
+    const match=clean.match(/\[.*\]/s);
+    if(!match)return[];
+    return JSON.parse(match[0]);
+  }catch(e){
+    console.error('OCR error:',e);
+    toast('OCR imeshindwa: '+e.message,'err');
+    return[];
+  }
 }
 
 // SHELL
@@ -853,7 +868,7 @@ async function renderAdmin(c){
       <div style="font-size:11px;color:var(--muted);margin-top:8px">Pata key bure: <a href="https://aistudio.google.com" target="_blank" style="color:var(--accent)">aistudio.google.com</a></div>
     </div>`;
   window._role=async(uid,role)=>{await sb.from('users').update({role}).eq('id',uid);toast(`Role → ${ROLES[role]}`);};
-  window._saveGemini=()=>{GEMINI_KEY=el('gemini-key')?.value||'';toast(GEMINI_KEY?'✅ Gemini key imehifadhiwa!':'Key ni empty','warn');};
+  window._saveGemini=()=>{GEMINI_KEY=el('gemini-key')?.value||'';localStorage.setItem('njem_gemini_key',GEMINI_KEY);toast(GEMINI_KEY?'✅ Gemini key imehifadhiwa! Inafanya kazi sasa.':'Key ni empty','warn');renderAdmin(c);};
 }
 
 // BOOT
