@@ -344,7 +344,7 @@ async function ocrImage(base64,mimeType){
   if(!GEMINI_KEY){toast('Weka Gemini API key kwenye Admin → Settings','err');return[];}
   try{
     // Use Gemini 1.5 Flash via fetch with proper headers
-    const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+    const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
     const body={
       contents:[{parts:[
         {text:`You are a sports betting slip reader. Extract ALL matches from this betslip image.
