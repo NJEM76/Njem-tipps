@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NJEM Tipps</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #05110a; --surface: #0c1f13; --surface2: #112819;
+      --border: #1a3522; --accent: #00ff85; --accent2: #00c965;
+      --text: #e4f0e8; --muted: #4a7a5a; --danger: #ff4444;
+      --warn: #ffaa00; --win: #00ff85; --loss: #ff4444;
+    }
+    body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--text); min-height: 100vh; }
+    input, select, textarea, button { font-family: 'DM Sans', sans-serif; }
+    input::placeholder, textarea::placeholder { color: var(--muted); }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent) !important; }
+    select option { background: #0c1f13; color: var(--text); }
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes slideIn { from { transform: translateX(60px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes glow { 0%,100% { box-shadow: 0 0 20px #00ff8522; } 50% { box-shadow: 0 0 40px #00ff8544; } }
+    .fadeUp { animation: fadeUp .35s ease both; }
+    .glow { animation: glow 3s infinite; }
+
+    /* ── LAYOUT ── */
+    #app { max-width: 500px; margin: 0 auto; min-height: 100vh; position: relative; padding-bottom: 80px; }
+
+    /* ── HEADER ── */
+    .header {
+      background: rgba(12,31,19,.97); border-bottom: 1px solid var(--border);
+      padding: .85rem 1.1rem; display: flex; align-items: center;
+      justify-content: space-between; position: sticky; top: 0; z-index: 100;
+    }
+    .header-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; color: var(--accent); }
+    .header-sub { font-size: 10px; color: var(--muted); }
+    .bankroll-chip {
+      background: rgba(0,0,0,.3); border: 1px solid var(--border);
+      border-radius: 20px; padding: .35rem .8rem; font-size: 12px;
+      color: var(--accent); font-weight: 600;
+    }
+    .logout-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; }
+
+    /* ── BOTTOM NAV ── */
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+      width: 100%; max-width: 500px; background: rgba(12,31,19,.97);
+      border-top: 1px solid var(--border); display: flex; z-index: 100;
+    }
+    .nav-btn {
+      flex: 1; background: none; border: none; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 2px; padding: .6rem .2rem;
+    }
+    .nav-icon { font-size: 18px; transition: filter .2s; }
+    .nav-icon.active { filter: none; }
+    .nav-icon.inactive { filter: grayscale(1) opacity(.35); }
+    .nav-label { font-size: 9px; font-weight: 400; color: var(--muted); }
+    .nav-label.active { font-weight: 700; color: var(--accent); }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 1rem; margin-bottom: .75rem;
+    }
+    .card-hero {
+      background: linear-gradient(135deg,#0f3520,#092518);
+      border: 1px solid rgba(0,255,133,.2); border-radius: 20px;
+      padding: 1.5rem; margin-bottom: 1rem;
+    }
+
+    /* ── INPUTS ── */
+    .inp {
+      width: 100%; padding: .75rem .9rem; border-radius: 12px;
+      border: 1.5px solid var(--border); background: rgba(0,0,0,.3);
+      color: var(--text); font-size: 14px;
+    }
+    .inp-sm {
+      width: 100%; padding: .65rem .8rem; border-radius: 10px;
+      border: 1.5px solid var(--border); background: rgba(0,0,0,.3);
+      color: var(--text); font-size: 13px;
+    }
+
+    /* ── BUTTONS ── */
+    .btn-primary {
+      width: 100%; padding: .9rem; border-radius: 14px; border: none;
+      background: var(--accent); color: #000; font-weight: 700;
+      font-size: 15px; cursor: pointer; font-family: 'DM Sans', sans-serif;
+    }
+    .btn-outline {
+      padding: .4rem .9rem; border-radius: 20px; border: 1.5px solid var(--border);
+      background: transparent; color: var(--muted); font-weight: 700;
+      font-size: 12px; cursor: pointer; font-family: 'DM Sans', sans-serif;
+      white-space: nowrap;
+    }
+    .btn-outline.active {
+      border-color: var(--accent); background: rgba(0,255,133,.15); color: var(--accent);
+    }
+    .btn-ghost {
+      width: 100%; padding: .65rem; border-radius: 10px;
+      border: 1px solid var(--accent); background: rgba(0,255,133,.08);
+      color: var(--accent); font-size: 12px; font-weight: 600;
+      cursor: pointer; font-family: 'DM Sans', sans-serif;
+    }
+
+    /* ── TOAST ── */
+    #toast-container {
+      position: fixed; top: 16px; right: 16px; z-index: 9999;
+      display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+    }
+    .toast {
+      padding: .7rem 1rem; border-radius: 12px; font-weight: 600;
+      font-size: 13px; max-width: 260px; animation: slideIn .3s ease;
+      box-shadow: 0 4px 24px rgba(0,0,0,.6);
+    }
+
+    /* ── STATS GRID ── */
+    .stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: .5rem; margin-bottom: 1rem; }
+    .stat-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: .75rem .4rem; text-align: center; }
+    .stat-icon { font-size: 18px; margin-bottom: 4px; }
+    .stat-val { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; }
+    .stat-label { font-size: 9px; color: var(--muted); margin-top: 2px; }
+
+    /* ── AUTH ── */
+    #auth-screen {
+      min-height: 100vh;
+      background: radial-gradient(ellipse at 30% 60%, #0d3520 0%, var(--bg) 65%);
+      display: flex; align-items: center; justify-content: center; padding: 1rem;
+    }
+    .auth-box {
+      width: 100%; max-width: 400px;
+      background: rgba(12,31,19,.96); border: 1px solid var(--border);
+      border-radius: 24px; padding: 2.25rem 2rem;
+      box-shadow: 0 0 80px rgba(0,255,133,.06);
+      animation: fadeUp .4s ease;
+    }
+    .auth-logo {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 70px; height: 70px; border-radius: 20px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      font-size: 30px; box-shadow: 0 0 30px #00ff8544;
+    }
+
+    /* ── MISC ── */
+    .section-title { font-family: 'Syne', sans-serif; font-size: 17px; font-weight: 800; margin-bottom: 1rem; }
+    .label { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .grid-2-btn { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-bottom: 1rem; }
+    .spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top: 3px solid var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+    .center { display: flex; justify-content: center; padding: .75rem; }
+    .empty { text-align: center; color: var(--muted); padding: 3rem 0; }
+    .empty-icon { font-size: 44px; }
+    .progress-bar { background: rgba(0,0,0,.4); border-radius: 20px; height: 10px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--win), var(--accent2)); border-radius: 20px; transition: width 1s ease; }
+    .tag { display: inline-block; padding: .15rem .55rem; border-radius: 20px; font-size: 10px; font-weight: 700; }
+    .banner-warn { background: var(--warn); padding: .5rem 1rem; text-align: center; font-size: 12px; font-weight: 700; color: #000; }
+    .banner-danger { background: var(--danger); padding: .5rem 1rem; text-align: center; font-size: 12px; font-weight: 700; color: #000; }
+    .rule-row { display: flex; gap: 8px; font-size: 12px; color: #5a9e70; margin-bottom: 6px; }
+    .check-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; cursor: pointer; }
+    .check-box {
+      width: 18px; height: 18px; border-radius: 5px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; margin-top: 1px; border: 2px solid var(--muted);
+      background: transparent; transition: all .2s;
+    }
+    .check-box.checked { border-color: var(--win); background: rgba(0,255,133,.2); color: var(--win); }
+    textarea.inp-sm { resize: vertical; }
+  </style>
+</head>
+<body>
+
+<div id="toast-container"></div>
+<div id="auth-screen" style="display:none"></div>
+<div id="app" style="display:none"></div>
+
+<script type="module">
+// ═══════════════════════════════════════════════════════════════
+// SUPABASE
+// ═══════════════════════════════════════════════════════════════
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+const SUPA_URL = 'https://mhmcvvfoylbnwqfwioys.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1obWN2dmZveWxibndxZndpb3lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5Mzc3NDUsImV4cCI6MjA5NDUxMzc0NX0.DJx01EDheWCjpq2nkdK0aljTmf9irfTugPhn_fTXSWM';
+const sb = createClient(SUPA_URL, SUPA_KEY);
+
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════
+const LEAGUES = [
+  { id:'epl',        name:'Premier League',       flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', ok:true  },
+  { id:'laliga',     name:'La Liga',              flag:'🇪🇸', ok:true  },
+  { id:'bundesliga', name:'Bundesliga',           flag:'🇩🇪', ok:true  },
+  { id:'seriea',     name:'Serie A',              flag:'🇮🇹', ok:true  },
+  { id:'ligue1',     name:'Ligue 1',              flag:'🇫🇷', ok:true  },
+  { id:'ucl',        name:'Champions League',     flag:'🏆', ok:true  },
+  { id:'uel',        name:'Europa League',        flag:'🔵', ok:true  },
+  { id:'tpl',        name:'Tanzania PL',          flag:'🇹🇿', ok:true  },
+  { id:'eredivisie', name:'Eredivisie',           flag:'🇳🇱', ok:true  },
+  { id:'saudi',      name:'Saudi Pro League',     flag:'🇸🇦', ok:false },
+  { id:'csl',        name:'Chinese Super League', flag:'🇨🇳', ok:false },
+];
+const MARKETS = ['Double Chance','1X2','Over 2.5','Under 2.5','BTTS','Over 1.5','Draw No Bet','Handicap'];
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+const uid     = () => crypto.randomUUID();
+const today   = () => new Date().toISOString().split('T')[0];
+const fmt     = (n) => Math.round(Number(n)).toLocaleString();
+const pct     = (a,b) => b===0 ? '0.0%' : ((a/b)*100).toFixed(1)+'%';
+const kelly   = (odds, p) => { const b=odds-1,q=1-p,k=(b*p-q)/b; return Math.min(Math.max(k*0.25,0),0.2); };
+const genOTP  = () => Math.floor(100000+Math.random()*900000).toString();
+const el      = (id) => document.getElementById(id);
+const clamp   = (v,a,b) => Math.min(Math.max(v,a),b);
+
+// State
+let currentUser = null;
+let mikeka      = [];
+let realtimeChannel = null;
+
+// ═══════════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════════
+function toast(msg, type='ok') {
+  const colors = { ok: 'var(--accent)', err: 'var(--danger)', warn: 'var(--warn)' };
+  const div = document.createElement('div');
+  div.className = 'toast';
+  div.style.background = colors[type] || colors.ok;
+  div.style.color = '#000';
+  div.textContent = msg;
+  el('toast-container').appendChild(div);
+  setTimeout(() => div.remove(), 3500);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AUTH SCREEN
+// ═══════════════════════════════════════════════════════════════
+function showAuth(mode='login') {
+  el('app').style.display = 'none';
+  el('auth-screen').style.display = 'flex';
+
+  let sentOTP = null;
+  let pendingData = null;
+
+  const render = (m) => {
+    mode = m;
+    el('auth-screen').innerHTML = `
+      <div class="auth-box">
+        <div style="text-align:center; margin-bottom:2rem">
+          <div class="auth-logo">📊</div>
+          <div style="font-family:'Syne',sans-serif; font-size:26px; font-weight:800; color:var(--accent); letter-spacing:-1px; margin-top:.75rem">NJEM Tipps</div>
+          <div style="font-size:12px; color:var(--muted); margin-top:4px">Smart Investor · Not Gambler</div>
+        </div>
+        <div id="auth-form"></div>
+      </div>
+    `;
+    renderForm(m);
+  };
+
+  const renderForm = (m) => {
+    const f = el('auth-form');
+
+    if (m === 'register') {
+      f.innerHTML = `
+        <div style="font-family:'Syne',sans-serif; font-size:18px; font-weight:700; margin-bottom:12px">Fungua Akaunti</div>
+        <input class="inp" id="r-name" placeholder="Jina lako kamili" style="margin-bottom:10px"/>
+        <input class="inp" id="r-phone" placeholder="Namba ya simu (0712...)" type="tel" style="margin-bottom:10px"/>
+        <input class="inp" id="r-pass" placeholder="Nenosiri (min 6)" type="password" style="margin-bottom:10px"/>
+        <input class="inp" id="r-confirm" placeholder="Thibitisha nenosiri" type="password" style="margin-bottom:14px"/>
+        <button class="btn-primary" id="r-btn">Pata OTP →</button>
+        <p style="text-align:center; font-size:13px; color:var(--muted); margin-top:12px">
+          Una akaunti? <span id="go-login" style="color:var(--accent); cursor:pointer; font-weight:600">Ingia</span>
+        </p>
+      `;
+      el('go-login').onclick = () => render('login');
+      el('r-btn').onclick = async () => {
+        const name    = el('r-name').value.trim();
+        const phone   = el('r-phone').value.replace(/\D/g,'');
+        const pass    = el('r-pass').value;
+        const confirm = el('r-confirm').value;
+        if (!name||!phone||!pass||!confirm) return toast('Jaza sehemu zote!','err');
+        if (pass.length<6) return toast('Nenosiri lazima liwe angalau herufi 6!','err');
+        if (pass!==confirm) return toast('Manenosiri hayafanani!','err');
+        if (phone.length<9) return toast('Namba ya simu si sahihi!','err');
+        el('r-btn').textContent = 'Inaangalia...';
+        el('r-btn').disabled = true;
+        const { data:existing } = await sb.from('users').select('id').eq('phone',phone).maybeSingle();
+        if (existing) { el('r-btn').textContent='Pata OTP →'; el('r-btn').disabled=false; return toast('Namba hii imeshasajiliwa!','err'); }
+        sentOTP = genOTP();
+        pendingData = { name, phone, password: pass };
+        el('r-btn').textContent='Pata OTP →'; el('r-btn').disabled=false;
+        toast(`📱 OTP yako: ${sentOTP}  (Demo mode)`,'warn');
+        render('otp');
+      };
+    }
+
+    else if (m === 'otp') {
+      f.innerHTML = `
+        <div style="font-family:'Syne',sans-serif; font-size:18px; font-weight:700; margin-bottom:12px">Thibitisha OTP</div>
+        <div style="background:rgba(0,255,133,.06); border:1px solid var(--border); border-radius:10px; padding:.75rem; font-size:12px; color:var(--muted); margin-bottom:12px">
+          📱 OTP imetumwa kwa <strong style="color:var(--accent)">${pendingData?.phone}</strong><br>
+          <em style="font-size:11px">(Demo: OTP ipo kwenye notification ya juu)</em>
+        </div>
+        <input class="inp" id="otp-val" placeholder="○ ○ ○ ○ ○ ○" type="number" maxlength="6"
+          style="text-align:center; font-size:22px; letter-spacing:8px; margin-bottom:12px"/>
+        <button class="btn-primary" id="otp-btn">✓ Thibitisha</button>
+        <div style="display:flex; justify-content:space-between; margin-top:12px; font-size:13px">
+          <span id="go-reg" style="color:var(--muted); cursor:pointer">← Rudi</span>
+          <span id="resend" style="color:var(--accent); cursor:pointer">Tuma tena OTP</span>
+        </div>
+      `;
+      el('go-reg').onclick = () => render('register');
+      el('resend').onclick = () => { sentOTP=genOTP(); toast(`OTP mpya: ${sentOTP}`,'warn'); };
+      el('otp-btn').onclick = async () => {
+        const val = el('otp-val').value.trim();
+        if (val !== sentOTP) return toast('OTP si sahihi!','err');
+        el('otp-btn').textContent='Inasajili...'; el('otp-btn').disabled=true;
+        const { data, error } = await sb.from('users').insert({
+          id: uid(), name: pendingData.name, phone: pendingData.phone,
+          password: pendingData.password, role: 'user', bankroll: 50000, stake: 5000
+        }).select().single();
+        el('otp-btn').textContent='✓ Thibitisha'; el('otp-btn').disabled=false;
+        if (error) return toast('Hitilafu: '+error.message,'err');
+        toast('Akaunti imefunguliwa! 🎉');
+        setTimeout(() => loginUser(data), 600);
+      };
+    }
+
+    else if (m === 'login') {
+      f.innerHTML = `
+        <div style="font-family:'Syne',sans-serif; font-size:18px; font-weight:700; margin-bottom:12px">Ingia</div>
+        <input class="inp" id="l-phone" placeholder="Namba ya simu" type="tel" style="margin-bottom:10px"/>
+        <input class="inp" id="l-pass" placeholder="Nenosiri" type="password" style="margin-bottom:14px"/>
+        <button class="btn-primary" id="l-btn">Ingia →</button>
+        <p style="text-align:center; font-size:13px; color:var(--muted); margin-top:12px">
+          Huna akaunti? <span id="go-reg2" style="color:var(--accent); cursor:pointer; font-weight:600">Sajili</span>
+        </p>
+      `;
+      el('go-reg2').onclick = () => render('register');
+      el('l-btn').onclick = async () => {
+        const phone = el('l-phone').value.replace(/\D/g,'');
+        const pass  = el('l-pass').value;
+        if (!phone||!pass) return toast('Jaza sehemu zote!','err');
+        el('l-btn').textContent='Inaingia...'; el('l-btn').disabled=true;
+        const { data, error } = await sb.from('users').select('*').eq('phone',phone).eq('password',pass).maybeSingle();
+        el('l-btn').textContent='Ingia →'; el('l-btn').disabled=false;
+        if (error||!data) return toast('Namba au nenosiri si sahihi!','err');
+        toast('Karibu! 👋');
+        setTimeout(() => loginUser(data), 400);
+      };
+    }
+  };
+
+  render(mode);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LOGIN & LOGOUT
+// ═══════════════════════════════════════════════════════════════
+async function loginUser(user) {
+  currentUser = user;
+  el('auth-screen').style.display = 'none';
+  el('app').style.display = 'block';
+  await loadMikeka();
+  startRealtime();
+  renderShell();
+  showTab('home');
+}
+
+function logout() {
+  if (realtimeChannel) sb.removeChannel(realtimeChannel);
+  currentUser = null; mikeka = [];
+  el('app').style.display = 'none';
+  showAuth('login');
+}
+
+async function updateUser(updates) {
+  const { data } = await sb.from('users').update(updates).eq('id', currentUser.id).select().single();
+  if (data) { currentUser = data; el('bankroll-val').textContent = '💰 ' + fmt(data.bankroll); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════════════════════
+async function loadMikeka() {
+  const { data, error } = await sb.from('mikeka')
+    .select('*, matches(*)')
+    .eq('user_id', currentUser.id)
+    .order('created_at', { ascending: false });
+  if (!error && data) mikeka = data;
+}
+
+function startRealtime() {
+  realtimeChannel = sb.channel('njem-live')
+    .on('postgres_changes', { event:'*', schema:'public', table:'mikeka', filter:`user_id=eq.${currentUser.id}` },
+      async () => { await loadMikeka(); refreshCurrentTab(); })
+    .subscribe();
+}
+
+let currentTab = 'home';
+function refreshCurrentTab() { showTab(currentTab); }
+
+// ═══════════════════════════════════════════════════════════════
+// SHELL
+// ═══════════════════════════════════════════════════════════════
+function renderShell() {
+  const tabs = [
+    { id:'home',    icon:'🏠', label:'Home'    },
+    { id:'mikeka',  icon:'📋', label:'Mikeka'  },
+    { id:'post',    icon:'➕', label:'Weka'    },
+    { id:'results', icon:'✅', label:'Results' },
+    { id:'reports', icon:'📊', label:'Ripoti'  },
+  ];
+  if (currentUser.role === 'admin') tabs.push({ id:'admin', icon:'⚙️', label:'Admin' });
+
+  el('app').innerHTML = `
+    <!-- Banner -->
+    <div id="streak-banner" style="display:none"></div>
+
+    <!-- Header -->
+    <div class="header">
+      <div>
+        <div class="header-title">NJEM Tipps</div>
+        <div class="header-sub" id="header-sub">Habari, ${currentUser.name.split(' ')[0]} ${currentUser.role==='admin'?'👑':'👋'}</div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center">
+        <div class="bankroll-chip" id="bankroll-val">💰 ${fmt(currentUser.bankroll)}</div>
+        <button class="logout-btn" onclick="window._logout()">⏻</button>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div id="content" style="padding:1rem"></div>
+
+    <!-- Bottom Nav -->
+    <nav class="bottom-nav" id="bottom-nav">
+      ${tabs.map(t => `
+        <button class="nav-btn" onclick="window._tab('${t.id}')">
+          <span class="nav-icon inactive" id="nav-icon-${t.id}">${t.icon}</span>
+          <span class="nav-label" id="nav-label-${t.id}">${t.label}</span>
+        </button>
+      `).join('')}
+    </nav>
+  `;
+
+  window._logout = logout;
+  window._tab    = showTab;
+}
+
+function updateNav(tab) {
+  document.querySelectorAll('.nav-icon').forEach(e => { e.classList.remove('active'); e.classList.add('inactive'); });
+  document.querySelectorAll('.nav-label').forEach(e => { e.classList.remove('active'); });
+  const ic = el(`nav-icon-${tab}`); const lb = el(`nav-label-${tab}`);
+  if (ic) { ic.classList.remove('inactive'); ic.classList.add('active'); }
+  if (lb) lb.classList.add('active');
+}
+
+function showTab(tab) {
+  currentTab = tab;
+  updateNav(tab);
+  updateStreakBanner();
+  const c = el('content');
+  c.className = 'fadeUp';
+  void c.offsetWidth; // reflow for animation
+  if (tab==='home')    renderHome(c);
+  if (tab==='mikeka')  renderMikeka(c);
+  if (tab==='post')    renderPost(c);
+  if (tab==='results') renderResults(c);
+  if (tab==='reports') renderReports(c);
+  if (tab==='admin')   renderAdmin(c);
+}
+
+function updateStreakBanner() {
+  const streak = getStreak();
+  const b = el('streak-banner');
+  if (!b) return;
+  if (streak.type==='LOSS' && streak.count>=2) {
+    b.style.display='block';
+    b.className = streak.count>=3 ? 'banner-danger' : 'banner-warn';
+    b.textContent = streak.count>=3
+      ? `🚨 SIMAMA! Loss streak ${streak.count}! Pumzika leo — NJEM Rule`
+      : `⚠️ Loss streak ${streak.count}. Kuwa makini sana!`;
+  } else { b.style.display='none'; }
+}
+
+function getStreak() {
+  const s = [...mikeka].filter(m=>m.status!=='PENDING'&&m.status!=='VOID');
+  if (!s.length) return {type:'none',count:0};
+  const t = s[0].status==='WON'?'WIN':'LOSS';
+  let c=0; for(const m of s){ if((m.status==='WON')===(t==='WIN')) c++; else break; }
+  return {type:t, count:c};
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HOME TAB
+// ═══════════════════════════════════════════════════════════════
+function renderHome(c) {
+  const won     = mikeka.filter(m=>m.status==='WON');
+  const lost    = mikeka.filter(m=>m.status==='LOST');
+  const settled = [...won,...lost];
+  const staked  = mikeka.reduce((s,m)=>s+(m.stake||0),0);
+  const ret     = won.reduce((s,m)=>s+(m.potential_return||0),0);
+  const profit  = ret - staked;
+  const roi     = staked>0 ? ((profit/staked)*100).toFixed(1) : '0.0';
+  const wr      = settled.length>0 ? ((won.length/settled.length)*100).toFixed(1) : '0.0';
+  const pending = mikeka.filter(m=>m.status==='PENDING');
+  const streak  = getStreak();
+
+  const pfColor  = profit>=0?'var(--win)':'var(--loss)';
+  const roiColor = parseFloat(roi)>=0?'var(--win)':'var(--loss)';
+  const wrColor  = parseFloat(wr)>=50?'var(--win)':'var(--loss)';
+
+  c.innerHTML = `
+    <!-- Bankroll Hero -->
+    <div class="card-hero glow" style="margin-bottom:1rem">
+      <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px">Bankroll Yako</div>
+      <div style="font-family:'Syne',sans-serif; font-size:38px; font-weight:800; color:var(--accent); letter-spacing:-1px">TZS ${fmt(currentUser.bankroll)}</div>
+      <div style="display:flex; gap:1.5rem; margin-top:10px">
+        <div><div style="font-size:10px;color:var(--muted)">Faida</div><div style="font-size:15px;font-weight:700;color:${pfColor}">${profit>=0?'+':''}${fmt(profit)}</div></div>
+        <div><div style="font-size:10px;color:var(--muted)">ROI</div><div style="font-size:15px;font-weight:700;color:${roiColor}">${roi}%</div></div>
+        <div><div style="font-size:10px;color:var(--muted)">Pending</div><div style="font-size:15px;font-weight:700;color:var(--warn)">${pending.length}</div></div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-box"><div class="stat-icon">📋</div><div class="stat-val">${mikeka.length}</div><div class="stat-label">Mikeka</div></div>
+      <div class="stat-box"><div class="stat-icon">✅</div><div class="stat-val" style="color:var(--win)">${won.length}</div><div class="stat-label">Imeshinda</div></div>
+      <div class="stat-box"><div class="stat-icon">🎯</div><div class="stat-val" style="color:${wrColor}">${wr}%</div><div class="stat-label">Win Rate</div></div>
+      <div class="stat-box"><div class="stat-icon">📈</div><div class="stat-val" style="color:${roiColor}">${roi}%</div><div class="stat-label">ROI</div></div>
+    </div>
+
+    <!-- Streak -->
+    ${streak.count>0 && streak.type!=='none' ? `
+    <div style="background:${streak.type==='WIN'?'#0f3520':'#2a0f0f'}; border:1px solid ${streak.type==='WIN'?'rgba(0,255,133,.3)':'rgba(255,68,68,.3)'}; border-radius:16px; padding:1rem; display:flex; align-items:center; gap:12px; margin-bottom:1rem">
+      <span style="font-size:32px">${streak.type==='WIN'?'🔥':'❄️'}</span>
+      <div>
+        <div style="font-weight:700; font-size:14px; color:${streak.type==='WIN'?'var(--win)':'var(--loss)'}">
+          ${streak.type==='WIN'?`Win Streak: ${streak.count} mfululizo! 🎉`:`Loss Streak: ${streak.count} mfululizo`}
+        </div>
+        <div style="font-size:11px; color:var(--muted); margin-top:2px">
+          ${streak.type==='WIN'?'Hongera! Dumisha nidhamu ya NJEM.':streak.count>=3?'Simama leo — NJEM Rule!':'Kuwa makini sana na mkeka ujao.'}
+        </div>
+      </div>
+    </div>` : ''}
+
+    <!-- Quick Actions -->
+    <div class="grid-2-btn">
+      <button class="btn-primary" onclick="window._tab('post')">➕ Weka Mkeka</button>
+      <button onclick="window._tab('results')" style="padding:.85rem; border-radius:14px; border:1.5px solid var(--border); background:transparent; color:var(--accent); font-weight:700; font-size:13px; cursor:pointer">✅ Matokeo</button>
+    </div>
+
+    <!-- NJEM Rules -->
+    <div class="card">
+      <div style="font-family:'Syne',sans-serif; font-size:13px; font-weight:700; color:var(--accent); margin-bottom:10px">🛡️ NJEM System Rules</div>
+      ${[['✅','Max mechi 4 kwa accumulator'],['✅','Double Chance ni market bora'],['✅','Kelly Criterion kwa staking'],['✅','Cashout @ 70% ya lengo'],['❌','Saudi & CSL — BANNED'],['🚨','Loss 3+ mfululizo → Simama!']].map(([i,r])=>`<div class="rule-row"><span>${i}</span><span>${r}</span></div>`).join('')}
+    </div>
+
+    <!-- Recent -->
+    ${mikeka.slice(0,3).map(m=>mkekaCardHTML(m,true)).join('')}
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MIKEKA TAB
+// ═══════════════════════════════════════════════════════════════
+let mikekaFilter = 'ALL';
+let mikekaSearch = '';
+
+function renderMikeka(c) {
+  const SC={WON:'var(--win)',LOST:'var(--loss)',PENDING:'var(--warn)',VOID:'#888'};
+  const shown = mikeka
+    .filter(m=>mikekaFilter==='ALL'||m.status===mikekaFilter)
+    .filter(m=>!mikekaSearch||m.name?.toLowerCase().includes(mikekaSearch)||m.matches?.some(x=>x.teams?.toLowerCase().includes(mikekaSearch)));
+
+  c.innerHTML = `
+    <input class="inp" id="mk-search" placeholder="🔍 Tafuta mkeka au timu..." value="${mikekaSearch}" style="margin-bottom:.75rem"/>
+    <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; margin-bottom:.75rem">
+      ${['ALL','PENDING','WON','LOST','VOID'].map(f=>`
+        <button class="btn-outline ${mikekaFilter===f?'active':''}" onclick="window._mkFilter('${f}')"
+          style="${mikekaFilter===f?`border-color:${SC[f]||'var(--accent)'}; background:${(SC[f]||'var(--accent)')+'22'}; color:${SC[f]||'var(--accent)'}`:''}"
+        >${f} <span style="opacity:.6">${mikeka.filter(m=>f==='ALL'||m.status===f).length}</span></button>
+      `).join('')}
+    </div>
+    ${shown.length===0
+      ?`<div class="empty"><div class="empty-icon">📋</div><div style="margin-top:8px">Hakuna mikeka</div></div>`
+      :shown.map(m=>mkekaCardHTML(m,false)).join('')
+    }
+  `;
+
+  el('mk-search').oninput = (e) => { mikekaSearch=e.target.value.toLowerCase(); renderMikeka(c); };
+  window._mkFilter = (f) => { mikekaFilter=f; renderMikeka(c); };
+
+  // Attach expand toggles
+  c.querySelectorAll('[data-expand]').forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.expand;
+      const detail = el('detail-'+id);
+      if (detail) detail.style.display = detail.style.display==='none'?'block':'none';
+    };
+  });
+}
+
+function mkekaCardHTML(m, mini) {
+  const SC={WON:'var(--win)',LOST:'var(--loss)',PENDING:'var(--warn)',VOID:'#888'};
+  const sc = SC[m.status]||'#888';
+  const matches = m.matches||[];
+  return `
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:16px; margin-bottom:.6rem; overflow:hidden">
+      <div data-expand="${m.id}" style="padding:.85rem; cursor:${mini?'default':'pointer'}; display:flex; justify-content:space-between; align-items:center">
+        <div style="flex:1">
+          <div style="font-weight:600; font-size:13px">${m.name||'Mkeka #'+m.id.slice(-4)}</div>
+          <div style="font-size:11px; color:var(--muted); margin-top:2px">${m.date} · ${matches.length} mechi · TZS ${fmt(m.stake)}</div>
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px">
+          <div style="background:${sc}22; color:${sc}; padding:.15rem .55rem; border-radius:20px; font-size:10px; font-weight:700">${m.status}</div>
+          <div style="font-size:12px; color:var(--accent); font-weight:600">${(m.total_odds||1).toFixed(2)}x</div>
+        </div>
+      </div>
+      ${!mini ? `
+      <div id="detail-${m.id}" style="display:none; border-top:1px solid var(--border); padding:.75rem">
+        ${matches.map((match,i)=>{
+          const mc=SC[match.outcome]||'#888';
+          return `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:.45rem 0; ${i<matches.length-1?'border-bottom:1px solid #0d1f14':''}">
+              <div>
+                <div style="font-size:12px; font-weight:600">${match.teams}</div>
+                <div style="font-size:10px; color:var(--muted)">${LEAGUES.find(l=>l.id===match.league)?.name||match.league} · ${match.market} · ${match.pick}</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:12px">${match.odds}x</div>
+                <div style="font-size:10px; font-weight:700; color:${mc}; background:${mc}22; padding:.1rem .4rem; border-radius:6px">${match.outcome||'PENDING'}</div>
+              </div>
+            </div>`;
+        }).join('')}
+        <div style="margin-top:.75rem; padding:.6rem; background:rgba(0,0,0,.3); border-radius:10px; display:flex; justify-content:space-between; font-size:13px">
+          <span style="color:var(--muted)">Potential Return:</span>
+          <span style="color:var(--accent); font-weight:700">TZS ${fmt(m.potential_return||0)}</span>
+        </div>
+        ${m.analysis?`<div style="margin-top:8px; font-size:11px; color:var(--muted); font-style:italic">📝 ${m.analysis}</div>`:''}
+      </div>` : ''}
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// POST TAB
+// ═══════════════════════════════════════════════════════════════
+let postMatches  = [];
+let postChecks   = [false,false,false,false];
+let kellyOn      = false;
+let kellyProb    = 55;
+
+function renderPost(c) {
+  if (!postMatches.length) postMatches = [newMatch()];
+  const totalOdds  = postMatches.reduce((p,m)=>p*(parseFloat(m.odds)||1),1);
+  const stake      = parseInt(el('post-stake')?.value||currentUser.stake||5000);
+  const potReturn  = Math.round(totalOdds*stake);
+  const kFrac      = kelly(totalOdds, kellyProb/100);
+  const kStake     = Math.round((currentUser.bankroll*kFrac)/1000)*1000;
+  const allChecked = postChecks.every(Boolean);
+  const checkLabels= ['Nimefanya research ya kutosha kwa kila mechi','Odds hizi zina value — sio kuchagua nasibu','Siko kwenye loss streak kubwa (zaidi ya 2)','Mechi zote ni kutoka leagues zilizoidhinishwa'];
+
+  c.innerHTML = `
+    <div class="section-title">➕ Mkeka Mpya</div>
+
+    <!-- Checklist -->
+    <div style="background:${allChecked?'#0f3520':'#1f1a00'}; border:1px solid ${allChecked?'rgba(0,255,133,.3)':'rgba(255,170,0,.3)'}; border-radius:14px; padding:1rem; margin-bottom:.9rem">
+      <div style="font-size:12px; font-weight:700; color:${allChecked?'var(--win)':'var(--warn)'}; margin-bottom:10px">
+        ${allChecked?'✅ Checklist Imekamilika — Uko Ready!':'⚠️ Pre-Bet Checklist (Lazima Ukamilishe)'}
+      </div>
+      ${checkLabels.map((label,i)=>`
+        <div class="check-row" onclick="window._check(${i})">
+          <div class="check-box ${postChecks[i]?'checked':''}">${postChecks[i]?'✓':''}</div>
+          <div style="font-size:11px; color:${postChecks[i]?'#5a9e70':'var(--muted)'}">${label}</div>
+        </div>
+      `).join('')}
+    </div>
+
+    <!-- Name & Date & Stake -->
+    <input class="inp" id="post-name" placeholder="Jina la mkeka (optional)" style="margin-bottom:10px"/>
+    <div class="grid-2" style="margin-bottom:10px">
+      <div><div class="label">Tarehe</div><input type="date" class="inp-sm" id="post-date" value="${today()}"/></div>
+      <div><div class="label">Stake (TZS)</div><input type="number" class="inp-sm" id="post-stake" value="${currentUser.stake||5000}"/></div>
+    </div>
+
+    <!-- Kelly -->
+    <div class="card" style="margin-bottom:.9rem">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:${kellyOn?'12px':'0'}">
+        <div style="font-size:12px; font-weight:700; color:var(--accent)">🧮 Kelly Criterion</div>
+        <button class="btn-outline ${kellyOn?'active':''}" onclick="window._toggleKelly()">${kellyOn?'Ficha':'Tumia'}</button>
+      </div>
+      ${kellyOn?`
+        <div style="font-size:11px; color:var(--muted); margin-bottom:8px">Uwezekano wako wa kushinda (%)</div>
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px">
+          <input type="range" min="30" max="80" value="${kellyProb}" id="kelly-range" style="flex:1; accent-color:var(--accent)" oninput="window._kellySlide(this.value)"/>
+          <span style="font-size:14px; font-weight:700; color:var(--accent); min-width:38px" id="kelly-pct">${kellyProb}%</span>
+        </div>
+        <div class="grid-2" style="margin-bottom:10px">
+          <div style="background:rgba(0,0,0,.3); padding:.6rem; border-radius:8px">
+            <div style="font-size:10px; color:var(--muted)">Kelly %</div>
+            <div style="font-weight:700; color:var(--accent); font-size:13px">${(kFrac*100).toFixed(1)}%</div>
+          </div>
+          <div style="background:rgba(0,0,0,.3); padding:.6rem; border-radius:8px">
+            <div style="font-size:10px; color:var(--muted)">Stake Bora</div>
+            <div style="font-weight:700; color:var(--accent); font-size:13px">TZS ${fmt(kStake)}</div>
+          </div>
+        </div>
+        <button class="btn-ghost" onclick="window._applyKelly(${kStake})">↑ Tumia TZS ${fmt(kStake)}</button>
+      `:''}
+    </div>
+
+    <!-- Matches -->
+    <div style="font-size:13px; font-weight:700; margin-bottom:8px">Mechi (${postMatches.length}/4)</div>
+    <div id="matches-container">
+      ${postMatches.map((m,i)=>matchFormHTML(m,i)).join('')}
+    </div>
+    <button onclick="window._addMatch()" style="width:100%; padding:.65rem; border-radius:10px; border:1.5px dashed var(--border); background:transparent; color:var(--muted); cursor:pointer; font-size:12px; margin-bottom:.9rem">+ Ongeza Mechi</button>
+
+    <!-- Analysis -->
+    <textarea class="inp-sm" id="post-analysis" placeholder="Analysis yako — mbona umichagua mikeka hii?" rows="3" style="margin-bottom:.9rem"></textarea>
+
+    <!-- Summary -->
+    <div style="background:linear-gradient(135deg,#0f3520,#092518); border:1px solid rgba(0,255,133,.2); border-radius:14px; padding:1rem; margin-bottom:.9rem">
+      ${[['Total Odds',totalOdds.toFixed(2)+'x','var(--text)'],['Stake','TZS '+fmt(stake),'var(--text)'],['Potential Return','TZS '+fmt(potReturn),'var(--win)'],['Faida','TZS '+fmt(potReturn-stake),(potReturn-stake)>=0?'var(--win)':'var(--loss)']].map(([l,v,color])=>`
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px">
+          <span style="color:var(--muted)">${l}</span>
+          <span style="font-weight:700; color:${color}">${v}</span>
+        </div>
+      `).join('')}
+    </div>
+
+    <button class="btn-primary" id="post-btn" onclick="window._postMkeka()">📤 Post Mkeka</button>
+  `;
+
+  // Wire match inputs
+  wireMatchInputs();
+
+  window._check = (i) => { postChecks[i]=!postChecks[i]; renderPost(c); };
+  window._toggleKelly = () => { kellyOn=!kellyOn; renderPost(c); };
+  window._kellySlide = (v) => { kellyProb=parseInt(v); if(el('kelly-pct')) el('kelly-pct').textContent=v+'%'; };
+  window._applyKelly = (s) => { if(el('post-stake')) el('post-stake').value=s; renderPost(c); };
+  window._addMatch   = () => { if(postMatches.length>=4){toast('Max mechi 4! (NJEM Rule)','err');return;} postMatches.push(newMatch()); renderPost(c); };
+  window._delMatch   = (id) => { if(postMatches.length>1){postMatches=postMatches.filter(m=>m._id!==id); renderPost(c);} };
+
+  window._postMkeka = async () => {
+    if (!postChecks.every(Boolean)) return toast('Kamilisha checklist kwanza!','warn');
+    readMatchInputs();
+    if (!postMatches.every(m=>m.teams&&m.pick&&m.odds)) return toast('Jaza mechi zote vizuri!','err');
+    const banned=postMatches.find(m=>{const l=LEAGUES.find(lg=>lg.id===m.league);return l&&!l.ok;});
+    if (banned){const l=LEAGUES.find(lg=>lg.id===banned.league);return toast(`⛔ ${l.name} ni BANNED!`,'err');}
+    const streak=getStreak();
+    if(streak.type==='LOSS'&&streak.count>=3) return toast('🚨 Loss streak 3! NJEM inakuzuia. Pumzika!','err');
+
+    const name      = el('post-name')?.value||`Mkeka ${mikeka.length+1}`;
+    const date      = el('post-date')?.value||today();
+    const stake     = parseInt(el('post-stake')?.value||5000);
+    const analysis  = el('post-analysis')?.value||'';
+    const totalOdds = postMatches.reduce((p,m)=>p*(parseFloat(m.odds)||1),1);
+    const potReturn = Math.round(totalOdds*stake);
+    const mkekaId   = uid();
+
+    const btn = el('post-btn');
+    btn.textContent='Inasave...'; btn.disabled=true;
+
+    const{error:e1}=await sb.from('mikeka').insert({
+      id:mkekaId, user_id:currentUser.id, name, date, stake,
+      total_odds:totalOdds, potential_return:potReturn, analysis, status:'PENDING'
+    });
+    if(e1){btn.textContent='📤 Post Mkeka'; btn.disabled=false; return toast('Hitilafu: '+e1.message,'err');}
+
+    const{error:e2}=await sb.from('matches').insert(
+      postMatches.map(m=>({id:uid(),mkeka_id:mkekaId,teams:m.teams,league:m.league,market:m.market,pick:m.pick,odds:parseFloat(m.odds),outcome:'PENDING'}))
+    );
+    btn.textContent='📤 Post Mkeka'; btn.disabled=false;
+    if(e2) return toast('Hitilafu ya mechi: '+e2.message,'err');
+
+    toast('Mkeka umewekwa! 🎯');
+    postMatches=[newMatch()]; postChecks=[false,false,false,false];
+    await loadMikeka();
+    showTab('mikeka');
+  };
+}
+
+function newMatch() { return {_id:uid(),teams:'',league:'epl',market:'Double Chance',pick:'',odds:''}; }
+
+function matchFormHTML(m, idx) {
+  return `
+    <div class="card" style="margin-bottom:.6rem">
+      <div style="display:flex; justify-content:space-between; margin-bottom:8px">
+        <div style="font-size:11px; font-weight:700; color:var(--accent)">Mechi ${idx+1}</div>
+        ${idx>0?`<button onclick="window._delMatch('${m._id}')" style="background:none; border:none; color:var(--loss); cursor:pointer; font-size:18px; padding:0">×</button>`:''}
+      </div>
+      <input class="inp-sm" data-mid="${m._id}" data-field="teams" placeholder="Timu A vs Timu B" value="${m.teams}" style="margin-bottom:6px"/>
+      <div class="grid-2" style="margin-bottom:6px">
+        <select class="inp-sm" data-mid="${m._id}" data-field="league">
+          ${LEAGUES.map(l=>`<option value="${l.id}" ${m.league===l.id?'selected':''} ${!l.ok?'disabled':''}>
+            ${!l.ok?'⛔ ':''}${l.flag} ${l.name}
+          </option>`).join('')}
+        </select>
+        <select class="inp-sm" data-mid="${m._id}" data-field="market">
+          ${MARKETS.map(mk=>`<option value="${mk}" ${m.market===mk?'selected':''}>${mk}</option>`).join('')}
+        </select>
+      </div>
+      <div class="grid-2">
+        <input class="inp-sm" data-mid="${m._id}" data-field="pick" placeholder="Pick (1X, Over 2.5...)" value="${m.pick}"/>
+        <input class="inp-sm" data-mid="${m._id}" data-field="odds" placeholder="Odds (1.75)" type="number" step="0.01" min="1" value="${m.odds}"/>
+      </div>
+    </div>
+  `;
+}
+
+function wireMatchInputs() {
+  document.querySelectorAll('[data-mid]').forEach(inp => {
+    inp.onchange = (e) => {
+      const mid   = e.target.dataset.mid;
+      const field = e.target.dataset.field;
+      const val   = e.target.value;
+      if (field==='league') {
+        const l=LEAGUES.find(lg=>lg.id===val);
+        if(l&&!l.ok){toast(`⛔ ${l.name} ni BANNED!`,'err'); e.target.value=postMatches.find(m=>m._id===mid)?.league||'epl'; return;}
+      }
+      postMatches = postMatches.map(m=>m._id===mid?{...m,[field]:val}:m);
+    };
+  });
+}
+
+function readMatchInputs() {
+  document.querySelectorAll('[data-mid]').forEach(inp => {
+    const mid=inp.dataset.mid, field=inp.dataset.field;
+    postMatches=postMatches.map(m=>m._id===mid?{...m,[field]:inp.value}:m);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RESULTS TAB
+// ═══════════════════════════════════════════════════════════════
+function renderResults(c) {
+  const pending = mikeka.filter(m=>m.status==='PENDING');
+  const SC={WIN:'var(--win)',LOSS:'var(--loss)',VOID:'#888'};
+
+  if (!pending.length) {
+    c.innerHTML=`<div class="section-title">✅ Rekodi Matokeo</div><div class="empty"><div class="empty-icon">✅</div><div style="margin-top:8px">Hakuna mikeka inayosubiri matokeo</div></div>`;
+    return;
+  }
+
+  c.innerHTML = `
+    <div class="section-title">✅ Rekodi Matokeo</div>
+    ${pending.map(m=>`
+      <div class="card" style="padding:0; overflow:hidden; margin-bottom:.75rem">
+        <div style="padding:.85rem; border-bottom:1px solid var(--border)">
+          <div style="font-weight:700">${m.name||'Mkeka #'+m.id.slice(-4)}</div>
+          <div style="font-size:11px; color:var(--muted)">${m.date} · ${(m.total_odds||1).toFixed(2)}x · TZS ${fmt(m.potential_return||0)}</div>
+        </div>
+        ${(m.matches||[]).map((match,i)=>`
+          <div style="padding:.75rem; border-bottom:${i<(m.matches.length-1)?'1px solid #0d1f14':'none'}">
+            <div style="font-size:12px; font-weight:600; margin-bottom:2px">${match.teams}</div>
+            <div style="font-size:10px; color:var(--muted); margin-bottom:8px">${match.market} · ${match.pick} @ ${match.odds}</div>
+            <div style="display:flex; gap:6px">
+              ${['WIN','LOSS','VOID'].map(o=>`
+                <button onclick="window._setOutcome('${m.id}','${match.id}','${o}')"
+                  style="flex:1; padding:.4rem; border-radius:20px; border:1.5px solid ${match.outcome===o?(SC[o]):'var(--border)'}; background:${match.outcome===o?(SC[o]+'22'):'transparent'}; color:${match.outcome===o?(SC[o]):'var(--muted)'}; font-weight:700; font-size:11px; cursor:pointer">
+                  ${o}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `).join('')}
+  `;
+
+  window._setOutcome = async (mkekaId, matchId, outcome) => {
+    await sb.from('matches').update({outcome}).eq('id',matchId);
+    const{data:allMatches}=await sb.from('matches').select('*').eq('mkeka_id',mkekaId);
+    const allSettled=allMatches.every(m=>m.outcome!=='PENDING');
+    if(allSettled){
+      const hasLoss=allMatches.some(m=>m.outcome==='LOSS');
+      const allVoid=allMatches.every(m=>m.outcome==='VOID');
+      const newStatus=hasLoss?'LOST':allVoid?'VOID':'WON';
+      await sb.from('mikeka').update({status:newStatus}).eq('id',mkekaId);
+      const mk=mikeka.find(m=>m.id===mkekaId);
+      if(newStatus==='WON'&&mk){
+        const gain=(mk.potential_return||0)-(mk.stake||0);
+        await updateUser({bankroll:currentUser.bankroll+gain});
+        toast(`🎉 Umeshinda! +TZS ${fmt(gain)}`);
+      } else if(newStatus==='LOST'){
+        toast('Mkeka umepoteza. Jaribu tena! 💪','warn');
+      }
+    }
+    await loadMikeka();
+    renderResults(c);
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// REPORTS TAB
+// ═══════════════════════════════════════════════════════════════
+let reportPeriod='month', reportView='overview';
+
+function renderReports(c) {
+  const now=new Date();
+  const fil=mikeka.filter(m=>{
+    const d=new Date(m.date);
+    if(reportPeriod==='week'){const w=new Date(now);w.setDate(now.getDate()-7);return d>=w;}
+    if(reportPeriod==='month') return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
+    if(reportPeriod==='year')  return d.getFullYear()===now.getFullYear();
+    return true;
+  });
+
+  const won=fil.filter(m=>m.status==='WON'),lost=fil.filter(m=>m.status==='LOST'),settled=[...won,...lost];
+  const staked=fil.reduce((s,m)=>s+(m.stake||0),0);
+  const ret=won.reduce((s,m)=>s+(m.potential_return||0),0);
+  const profit=ret-staked;
+  const roi=staked>0?((profit/staked)*100).toFixed(1):'0.0';
+  const wr=settled.length>0?((won.length/settled.length)*100).toFixed(1):'0.0';
+  const avgOdds=fil.length>0?(fil.reduce((s,m)=>s+(m.total_odds||1),0)/fil.length).toFixed(2):'0.00';
+
+  // League stats
+  const lgMap={};
+  fil.forEach(m=>(m.matches||[]).forEach(x=>{
+    if(!lgMap[x.league]) lgMap[x.league]={w:0,l:0,t:0};
+    lgMap[x.league].t++;
+    if(x.outcome==='WIN') lgMap[x.league].w++;
+    if(x.outcome==='LOSS') lgMap[x.league].l++;
+  }));
+
+  // Market stats
+  const mkMap={};
+  fil.forEach(m=>(m.matches||[]).forEach(x=>{
+    if(!mkMap[x.market]) mkMap[x.market]={w:0,t:0};
+    mkMap[x.market].t++;
+    if(x.outcome==='WIN') mkMap[x.market].w++;
+  }));
+
+  // Daily trend
+  const dayMap={};
+  fil.forEach(m=>{
+    if(!dayMap[m.date]) dayMap[m.date]=0;
+    if(m.status==='WON') dayMap[m.date]+=(m.potential_return-m.stake);
+    if(m.status==='LOST') dayMap[m.date]-=m.stake;
+  });
+  const days=Object.entries(dayMap).sort((a,b)=>a[0].localeCompare(b[0])).slice(-14);
+  const maxAbs=Math.max(...days.map(([,v])=>Math.abs(v)),1);
+
+  const grade=parseFloat(roi)>=15?'A+':parseFloat(roi)>=5?'A':parseFloat(roi)>=0?'B':parseFloat(roi)>=-10?'C':'D';
+  const gradeColor=parseFloat(roi)>=5?'var(--win)':parseFloat(roi)>=0?'var(--warn)':'var(--loss)';
+
+  c.innerHTML = `
+    <div class="section-title">📊 Ripoti za Ufanisi</div>
+
+    <!-- Period -->
+    <div style="display:flex; gap:6px; margin-bottom:.75rem">
+      ${[['week','Wiki'],['month','Mwezi'],['year','Mwaka'],['all','Yote']].map(([v,l])=>`
+        <button style="flex:1; padding:.45rem; border-radius:12px; border:1.5px solid ${reportPeriod===v?'var(--accent)':'var(--border)'}; background:${reportPeriod===v?'rgba(0,255,133,.15)':'transparent'}; color:${reportPeriod===v?'var(--accent)':'var(--muted)'}; font-weight:700; font-size:12px; cursor:pointer"
+          onclick="window._rPeriod('${v}')">${l}</button>
+      `).join('')}
+    </div>
+
+    <!-- View -->
+    <div style="display:flex; gap:6px; margin-bottom:.9rem">
+      ${[['overview','Muhtasari'],['leagues','Ligi'],['markets','Markets'],['trend','Trend']].map(([v,l])=>`
+        <button style="flex:1; padding:.4rem; border-radius:10px; border:1.5px solid ${reportView===v?'var(--accent)':'var(--border)'}; background:${reportView===v?'rgba(0,255,133,.1)':'transparent'}; color:${reportView===v?'var(--accent)':'var(--muted)'}; font-weight:700; font-size:11px; cursor:pointer"
+          onclick="window._rView('${v}')">${l}</button>
+      `).join('')}
+    </div>
+
+    <!-- Content -->
+    <div id="report-content"></div>
+  `;
+
+  window._rPeriod=(v)=>{reportPeriod=v;renderReports(c);};
+  window._rView  =(v)=>{reportView=v;renderReports(c);};
+
+  const rc=el('report-content');
+
+  if(reportView==='overview'){
+    rc.innerHTML=`
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:.75rem">
+        ${[['📋',fil.length,'Mikeka','var(--text)'],['✅',won.length,'Imeshinda','var(--win)'],['❌',lost.length,'Imepoteza','var(--loss)'],['🎯',wr+'%','Win Rate',parseFloat(wr)>=50?'var(--win)':'var(--loss)'],['💸',fmt(staked),'Staked TZS','var(--text)'],['💰',fmt(ret),'Return TZS','var(--win)'],[profit>=0?'📈':'📉',(profit>=0?'+':'')+fmt(profit),'Faida/Hasara',profit>=0?'var(--win)':'var(--loss)'],['🔄',roi+'%','ROI',parseFloat(roi)>=0?'var(--win)':'var(--loss)'],['🎲',avgOdds+'x','Avg Odds','var(--text)']].map(([ic,v,l,col])=>`
+          <div class="stat-box"><div class="stat-icon">${ic}</div><div class="stat-val" style="color:${col}">${v}</div><div class="stat-label">${l}</div></div>
+        `).join('')}
+      </div>
+      <div class="card" style="margin-bottom:.75rem">
+        <div style="font-size:12px; font-weight:700; margin-bottom:10px">Win vs Loss</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${clamp(parseFloat(wr),0,100)}%"></div></div>
+        <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:var(--muted)">
+          <span>Loss: ${lost.length}</span><span style="color:var(--win); font-weight:700">${wr}% won</span><span>Win: ${won.length}</span>
+        </div>
+      </div>
+      <div style="background:linear-gradient(135deg,#0f3520,#092518); border:1px solid rgba(0,255,133,.2); border-radius:14px; padding:1rem; display:flex; align-items:center; gap:16px">
+        <div style="font-family:'Syne',sans-serif; font-size:52px; font-weight:800; color:${gradeColor}">${grade}</div>
+        <div>
+          <div style="font-size:12px; font-weight:700; color:var(--accent); margin-bottom:4px">🛡️ NJEM Discipline Score</div>
+          <div style="font-size:12px; color:#5a9e70">${parseFloat(roi)>=15?'🔥 Bora sana! Endelea na mfumo!':parseFloat(roi)>=0?'👍 Uko njia sahihi. Dumisha!':parseFloat(roi)>=-10?'⚠️ Pumzika. Kagua strategy yako.':'🚨 Simama kabisa. Reboot bankroll.'}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  if(reportView==='leagues'){
+    rc.innerHTML=Object.entries(lgMap).sort((a,b)=>b[1].w-a[1].w).map(([id,s])=>{
+      const wr2=s.t>0?((s.w/s.t)*100).toFixed(0):0;
+      const lg=LEAGUES.find(l=>l.id===id);
+      return `
+        <div class="card" style="margin-bottom:.6rem">
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px">
+            <span style="font-weight:600; font-size:13px">${lg?.flag} ${lg?.name||id}</span>
+            <span style="font-weight:700; color:${parseInt(wr2)>=50?'var(--win)':'var(--loss)'}">${wr2}%</span>
+          </div>
+          <div style="background:rgba(0,0,0,.4); border-radius:10px; height:6px; overflow:hidden">
+            <div style="height:100%; width:${wr2}%; background:var(--win); border-radius:10px; transition:width .8s"></div>
+          </div>
+          <div style="font-size:10px; color:var(--muted); margin-top:4px">${s.w}W / ${s.l}L / ${s.t} mechi</div>
+        </div>
+      `;
+    }).join('')||'<div class="empty"><div class="empty-icon">📊</div><div style="margin-top:8px">Hakuna data</div></div>';
+  }
+
+  if(reportView==='markets'){
+    rc.innerHTML=Object.entries(mkMap).sort((a,b)=>b[1].w-a[1].w).map(([market,s])=>{
+      const wr2=s.t>0?((s.w/s.t)*100).toFixed(0):0;
+      return `
+        <div class="card" style="margin-bottom:.6rem">
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px">
+            <span style="font-weight:600; font-size:13px">${market}</span>
+            <span style="font-weight:700; color:${parseInt(wr2)>=50?'var(--win)':'var(--loss)'}">${wr2}%</span>
+          </div>
+          <div style="background:rgba(0,0,0,.4); border-radius:10px; height:6px; overflow:hidden">
+            <div style="height:100%; width:${wr2}%; background:#4da6ff; border-radius:10px"></div>
+          </div>
+          <div style="font-size:10px; color:var(--muted); margin-top:4px">${s.w}W / ${s.t-s.w}L</div>
+        </div>
+      `;
+    }).join('')||'<div class="empty"><div class="empty-icon">📊</div><div style="margin-top:8px">Hakuna data</div></div>';
+  }
+
+  if(reportView==='trend'){
+    rc.innerHTML=`
+      <div class="card">
+        <div style="font-size:12px; font-weight:700; color:var(--accent); margin-bottom:12px">📈 Trend ya Faida/Hasara (Siku 14)</div>
+        ${days.length===0?'<div style="text-align:center; color:var(--muted); padding:1rem">Hakuna data ya kutosha</div>':
+          days.map(([date,val])=>`
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px">
+              <div style="font-size:10px; color:var(--muted); min-width:55px">${date.slice(5)}</div>
+              <div style="flex:1; background:rgba(0,0,0,.4); border-radius:6px; height:18px; overflow:hidden; position:relative">
+                ${val!==0?`<div style="position:absolute; top:0; height:100%; width:${(Math.abs(val)/maxAbs*100).toFixed(0)}%; ${val>0?'left:0':'right:0'}; background:${val>0?'var(--win)':'var(--loss)'}; border-radius:6px"></div>`:''}
+              </div>
+              <div style="font-size:11px; font-weight:700; color:${val>=0?'var(--win)':'var(--loss)'}; min-width:75px; text-align:right">${val>=0?'+':''}${fmt(val)}</div>
+            </div>
+          `).join('')
+        }
+      </div>
+    `;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ADMIN TAB
+// ═══════════════════════════════════════════════════════════════
+async function renderAdmin(c) {
+  c.innerHTML=`<div class="section-title">⚙️ Admin Dashboard</div><div class="center"><div class="spinner"></div></div>`;
+  const{data:users}=await sb.from('users').select('*');
+  const{data:allMikeka}=await sb.from('mikeka').select('stake,status,potential_return');
+  const won=(allMikeka||[]).filter(m=>m.status==='WON');
+  const staked=(allMikeka||[]).reduce((s,m)=>s+(m.stake||0),0);
+
+  c.innerHTML=`
+    <div class="section-title">⚙️ Admin Dashboard</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:1rem">
+      ${[['👥',(users||[]).length,'Watumiaji','var(--text)'],['📋',(allMikeka||[]).length,'Mikeka Yote','var(--text)'],['🏆',won.length,'Zilizoshinda','var(--win)'],['💸',fmt(staked),'Total Staked','var(--accent)']].map(([ic,v,l,col])=>`
+        <div class="stat-box"><div class="stat-icon">${ic}</div><div class="stat-val" style="color:${col}">${v}</div><div class="stat-label">${l}</div></div>
+      `).join('')}
+    </div>
+    <div class="card">
+      <div style="font-size:12px; font-weight:700; color:var(--warn); margin-bottom:8px">👥 Watumiaji Wote</div>
+      ${(users||[]).map(u=>`
+        <div style="display:flex; justify-content:space-between; padding:.6rem 0; border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-weight:600; font-size:13px">${u.name} ${u.role==='admin'?'👑':''}</div>
+            <div style="font-size:10px; color:var(--muted)">${u.phone} · ${u.role}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="color:var(--accent); font-weight:700; font-size:13px">TZS ${fmt(u.bankroll)}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════
+showAuth('login');
+</script>
+</body>
+</html>
