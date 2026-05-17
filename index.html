@@ -341,28 +341,44 @@ function analyzeRisk(matches){
   return{flags,tips,totalOdds};
 }
 async function ocrImage(base64,mimeType){
-  if(!GEMINI_KEY){toast('Weka Gemini API key kwenye Admin → Settings','err');return[];}
+  if(!GEMINI_KEY){toast('Weka OpenRouter API key kwenye Admin → Settings','err');return[];}
   try{
-    // Use Gemini 1.5 Flash via fetch with proper headers
-    const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+    const url='https://openrouter.ai/api/v1/chat/completions';
     const body={
-      contents:[{parts:[
-        {text:`You are a sports betting slip reader. Extract ALL matches from this betslip image.
-Return ONLY a valid JSON array, no markdown, no explanation:
+      model:'google/gemini-2.0-flash-exp:free',
+      messages:[{
+        role:'user',
+        content:[
+          {type:'text',text:`You are a sports betting slip reader. Extract ALL matches from this betslip image.
+Return ONLY a valid JSON array, nothing else, no markdown:
 [{"teams":"Team A vs Team B","market":"Double Chance","pick":"1X","odds":"1.75"}]
-If you cannot read clearly, make your best guess. Always return valid JSON array.`},
-        {inline_data:{mime_type:mimeType,data:base64}}
-      ]}],
-      generationConfig:{temperature:0.1,maxOutputTokens:1000}
+Always return valid JSON array even if unsure.`},
+          {type:'image_url',image_url:{url:'data:'+mimeType+';base64,'+base64}}
+        ]
+      }],
+      max_tokens:1000,
+      temperature:0.1
     };
-    const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    if(!res.ok){const err=await res.json();toast('Gemini error: '+(err.error?.message||res.status),'err');return[];}
+    const res=await fetch(url,{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':'Bearer '+GEMINI_KEY,
+        'HTTP-Referer':'https://njem-tipps.netlify.app',
+        'X-Title':'NJEM Tipps'
+      },
+      body:JSON.stringify(body)
+    });
+    if(!res.ok){
+      const err=await res.json();
+      toast('OpenRouter error: '+(err.error?.message||res.status),'err');
+      return[];
+    }
     const data=await res.json();
-    const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'[]';
-    const clean=text.replace(/```json|```|\n/g,'').trim();
-    // Find JSON array in response
-    const match=clean.match(/\[.*\]/s);
-    if(!match)return[];
+    const text=data.choices?.[0]?.message?.content||'[]';
+    const clean=text.replace(/```json|```/g,'').trim();
+    const match=clean.match(/\[[\s\S]*\]/);
+    if(!match){toast('Mechi hazipatikani kwenye picha','warn');return[];}
     return JSON.parse(match[0]);
   }catch(e){
     console.error('OCR error:',e);
@@ -604,7 +620,7 @@ function renderPost(c){
         <div style="font-size:11px;color:var(--muted);margin-top:4px">JPG, PNG — Gemini AI itasoma mechi zote</div>
         ${GEMINI_KEY
           ? '<div style="font-size:10px;color:var(--win);margin-top:6px;font-weight:600">✅ Gemini iko tayari</div>'
-          : '<div style="font-size:10px;color:var(--warn);margin-top:6px">⚠️ Weka Gemini key kwenye Admin kwanza</div>'}
+          : '<div style="font-size:10px;color:var(--warn);margin-top:6px">⚠️ Weka OpenRouter key kwenye Admin kwanza</div>'}
       </label>
       <input type="file" id="ocr-in" accept="image/*,image/jpeg,image/png,image/webp" capture="environment" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px"/>
     </div>
@@ -659,7 +675,7 @@ function renderPost(c){
     newInput.addEventListener('change', async function(e){
       const file = e.target.files && e.target.files[0];
       if(!file){toast('Hakuna picha iliyochaguliwa','warn');return;}
-      if(!GEMINI_KEY){toast('Weka Gemini API key kwenye Admin kwanza!','err');return;}
+      if(!GEMINI_KEY){toast('Weka OpenRouter API key kwenye Admin kwanza!','err');return;}
       // Show loading state
       const txt = el('ocr-txt');
       const lbl = el('ocr-label');
@@ -898,10 +914,10 @@ async function renderAdmin(c){
       </div>`).join('')}
     </div>
     <div class="card" style="border-color:rgba(77,166,255,.3)">
-      <div style="font-size:12px;font-weight:700;color:var(--info);margin-bottom:10px">🤖 Gemini OCR — Weka API Key</div>
-      <input class="inp" id="gemini-key" placeholder="Paste Gemini API key hapa..." style="margin-bottom:8px" value="${GEMINI_KEY}"/>
+      <div style="font-size:12px;font-weight:700;color:var(--info);margin-bottom:10px">🤖 OpenRouter AI — Weka API Key</div>
+      <input class="inp" id="gemini-key" placeholder="Paste OpenRouter API key hapa (sk-or-v1-...)" style="margin-bottom:8px" value="${GEMINI_KEY}"/>
       <button onclick="window._saveGemini()" class="btn-ghost">💾 Hifadhi Key</button>
-      <div style="font-size:11px;color:var(--muted);margin-top:8px">Pata key bure: <a href="https://aistudio.google.com" target="_blank" style="color:var(--accent)">aistudio.google.com</a></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">Pata key bure: <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent)">openrouter.ai/keys</a> (inaanza na sk-or-v1-...)</div>
     </div>`;
   window._role=async(uid,role)=>{await sb.from('users').update({role}).eq('id',uid);toast(`Role → ${ROLES[role]}`);};
   window._saveGemini=()=>{GEMINI_KEY=el('gemini-key')?.value||'';localStorage.setItem('njem_gemini_key',GEMINI_KEY);toast(GEMINI_KEY?'✅ Gemini key imehifadhiwa! Inafanya kazi sasa.':'Key ni empty','warn');renderAdmin(c);};
