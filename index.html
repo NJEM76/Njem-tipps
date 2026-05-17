@@ -3,1111 +3,862 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>NJEM Tipps</title>
+  <title>NJEM Tipps v2.0</title>
   <link rel="manifest" href="manifest.json"/>
   <meta name="theme-color" content="#00ff85"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="NJEM Tipps"/>
   <link rel="apple-touch-icon" href="icon-192.png"/>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #05110a; --surface: #0c1f13; --surface2: #112819;
-      --border: #1a3522; --accent: #00ff85; --accent2: #00c965;
-      --text: #e4f0e8; --muted: #4a7a5a; --danger: #ff4444;
-      --warn: #ffaa00; --win: #00ff85; --loss: #ff4444;
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#05110a;--surface:#0c1f13;--border:#1a3522;
+      --accent:#00ff85;--accent2:#00c965;--text:#e4f0e8;
+      --muted:#4a7a5a;--danger:#ff4444;--warn:#ffaa00;
+      --win:#00ff85;--loss:#ff4444;--info:#4da6ff;
     }
-    body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--text); min-height: 100vh; }
-    input, select, textarea, button { font-family: 'DM Sans', sans-serif; }
-    input::placeholder, textarea::placeholder { color: var(--muted); }
-    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent) !important; }
-    select option { background: #0c1f13; color: var(--text); }
-    ::-webkit-scrollbar { width: 3px; }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes fadeUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-    @keyframes slideIn { from { transform: translateX(60px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    @keyframes glow { 0%,100% { box-shadow: 0 0 20px #00ff8522; } 50% { box-shadow: 0 0 40px #00ff8544; } }
-    .fadeUp { animation: fadeUp .35s ease both; }
-    .glow { animation: glow 3s infinite; }
-
-    /* ── LAYOUT ── */
-    #app { max-width: 500px; margin: 0 auto; min-height: 100vh; position: relative; padding-bottom: 80px; }
-
-    /* ── HEADER ── */
-    .header {
-      background: rgba(12,31,19,.97); border-bottom: 1px solid var(--border);
-      padding: .85rem 1.1rem; display: flex; align-items: center;
-      justify-content: space-between; position: sticky; top: 0; z-index: 100;
-    }
-    .header-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; color: var(--accent); }
-    .header-sub { font-size: 10px; color: var(--muted); }
-    .bankroll-chip {
-      background: rgba(0,0,0,.3); border: 1px solid var(--border);
-      border-radius: 20px; padding: .35rem .8rem; font-size: 12px;
-      color: var(--accent); font-weight: 600;
-    }
-    .logout-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; }
-
-    /* ── BOTTOM NAV ── */
-    .bottom-nav {
-      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
-      width: 100%; max-width: 500px; background: rgba(12,31,19,.97);
-      border-top: 1px solid var(--border); display: flex; z-index: 100;
-    }
-    .nav-btn {
-      flex: 1; background: none; border: none; cursor: pointer;
-      display: flex; flex-direction: column; align-items: center;
-      gap: 2px; padding: .6rem .2rem;
-    }
-    .nav-icon { font-size: 18px; transition: filter .2s; }
-    .nav-icon.active { filter: none; }
-    .nav-icon.inactive { filter: grayscale(1) opacity(.35); }
-    .nav-label { font-size: 9px; font-weight: 400; color: var(--muted); }
-    .nav-label.active { font-weight: 700; color: var(--accent); }
-
-    /* ── CARDS ── */
-    .card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 16px; padding: 1rem; margin-bottom: .75rem;
-    }
-    .card-hero {
-      background: linear-gradient(135deg,#0f3520,#092518);
-      border: 1px solid rgba(0,255,133,.2); border-radius: 20px;
-      padding: 1.5rem; margin-bottom: 1rem;
-    }
-
-    /* ── INPUTS ── */
-    .inp {
-      width: 100%; padding: .75rem .9rem; border-radius: 12px;
-      border: 1.5px solid var(--border); background: rgba(0,0,0,.3);
-      color: var(--text); font-size: 14px;
-    }
-    .inp-sm {
-      width: 100%; padding: .65rem .8rem; border-radius: 10px;
-      border: 1.5px solid var(--border); background: rgba(0,0,0,.3);
-      color: var(--text); font-size: 13px;
-    }
-
-    /* ── BUTTONS ── */
-    .btn-primary {
-      width: 100%; padding: .9rem; border-radius: 14px; border: none;
-      background: var(--accent); color: #000; font-weight: 700;
-      font-size: 15px; cursor: pointer; font-family: 'DM Sans', sans-serif;
-    }
-    .btn-outline {
-      padding: .4rem .9rem; border-radius: 20px; border: 1.5px solid var(--border);
-      background: transparent; color: var(--muted); font-weight: 700;
-      font-size: 12px; cursor: pointer; font-family: 'DM Sans', sans-serif;
-      white-space: nowrap;
-    }
-    .btn-outline.active {
-      border-color: var(--accent); background: rgba(0,255,133,.15); color: var(--accent);
-    }
-    .btn-ghost {
-      width: 100%; padding: .65rem; border-radius: 10px;
-      border: 1px solid var(--accent); background: rgba(0,255,133,.08);
-      color: var(--accent); font-size: 12px; font-weight: 600;
-      cursor: pointer; font-family: 'DM Sans', sans-serif;
-    }
-
-    /* ── TOAST ── */
-    #toast-container {
-      position: fixed; top: 16px; right: 16px; z-index: 9999;
-      display: flex; flex-direction: column; gap: 8px; pointer-events: none;
-    }
-    .toast {
-      padding: .7rem 1rem; border-radius: 12px; font-weight: 600;
-      font-size: 13px; max-width: 260px; animation: slideIn .3s ease;
-      box-shadow: 0 4px 24px rgba(0,0,0,.6);
-    }
-
-    /* ── STATS GRID ── */
-    .stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: .5rem; margin-bottom: 1rem; }
-    .stat-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: .75rem .4rem; text-align: center; }
-    .stat-icon { font-size: 18px; margin-bottom: 4px; }
-    .stat-val { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; }
-    .stat-label { font-size: 9px; color: var(--muted); margin-top: 2px; }
-
-    /* ── AUTH ── */
-    #auth-screen {
-      min-height: 100vh;
-      background: radial-gradient(ellipse at 30% 60%, #0d3520 0%, var(--bg) 65%);
-      display: flex; align-items: center; justify-content: center; padding: 1rem;
-    }
-    .auth-box {
-      width: 100%; max-width: 400px;
-      background: rgba(12,31,19,.96); border: 1px solid var(--border);
-      border-radius: 24px; padding: 2.25rem 2rem;
-      box-shadow: 0 0 80px rgba(0,255,133,.06);
-      animation: fadeUp .4s ease;
-    }
-    .auth-logo {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 70px; height: 70px; border-radius: 20px;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      font-size: 30px; box-shadow: 0 0 30px #00ff8544;
-    }
-
-    /* ── MISC ── */
-    .section-title { font-family: 'Syne', sans-serif; font-size: 17px; font-weight: 800; margin-bottom: 1rem; }
-    .label { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .grid-2-btn { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-bottom: 1rem; }
-    .spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top: 3px solid var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
-    .center { display: flex; justify-content: center; padding: .75rem; }
-    .empty { text-align: center; color: var(--muted); padding: 3rem 0; }
-    .empty-icon { font-size: 44px; }
-    .progress-bar { background: rgba(0,0,0,.4); border-radius: 20px; height: 10px; overflow: hidden; }
-    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--win), var(--accent2)); border-radius: 20px; transition: width 1s ease; }
-    .tag { display: inline-block; padding: .15rem .55rem; border-radius: 20px; font-size: 10px; font-weight: 700; }
-    .banner-warn { background: var(--warn); padding: .5rem 1rem; text-align: center; font-size: 12px; font-weight: 700; color: #000; }
-    .banner-danger { background: var(--danger); padding: .5rem 1rem; text-align: center; font-size: 12px; font-weight: 700; color: #000; }
-    .rule-row { display: flex; gap: 8px; font-size: 12px; color: #5a9e70; margin-bottom: 6px; }
-    .check-row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; cursor: pointer; }
-    .check-box {
-      width: 18px; height: 18px; border-radius: 5px; flex-shrink: 0;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 10px; margin-top: 1px; border: 2px solid var(--muted);
-      background: transparent; transition: all .2s;
-    }
-    .check-box.checked { border-color: var(--win); background: rgba(0,255,133,.2); color: var(--win); }
-    textarea.inp-sm { resize: vertical; }
+    body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min-height:100vh}
+    input,select,textarea,button{font-family:'DM Sans',sans-serif}
+    input::placeholder,textarea::placeholder{color:var(--muted)}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)!important}
+    select option{background:#0c1f13;color:var(--text)}
+    ::-webkit-scrollbar{width:3px}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @keyframes fadeUp{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
+    @keyframes slideIn{from{transform:translateX(60px);opacity:0}to{transform:translateX(0);opacity:1}}
+    @keyframes glow{0%,100%{box-shadow:0 0 20px #00ff8522}50%{box-shadow:0 0 40px #00ff8544}}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+    .fadeUp{animation:fadeUp .35s ease both}
+    .glow{animation:glow 3s infinite}
+    #app{max-width:500px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:80px}
+    .header{background:rgba(12,31,19,.97);border-bottom:1px solid var(--border);padding:.85rem 1.1rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+    .header-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--accent)}
+    .header-sub{font-size:10px;color:var(--muted)}
+    .bankroll-chip{background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:20px;padding:.35rem .8rem;font-size:12px;color:var(--accent);font-weight:600;cursor:pointer}
+    .logout-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px}
+    .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:500px;background:rgba(12,31,19,.97);border-top:1px solid var(--border);display:flex;z-index:100}
+    .nav-btn{flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:.6rem .2rem}
+    .nav-icon{font-size:18px;transition:filter .2s}
+    .nav-icon.active{filter:none}
+    .nav-icon.inactive{filter:grayscale(1) opacity(.35)}
+    .nav-label{font-size:9px;font-weight:400;color:var(--muted)}
+    .nav-label.active{font-weight:700;color:var(--accent)}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:1rem;margin-bottom:.75rem}
+    .inp{width:100%;padding:.75rem .9rem;border-radius:12px;border:1.5px solid var(--border);background:rgba(0,0,0,.3);color:var(--text);font-size:14px}
+    .inp-sm{width:100%;padding:.65rem .8rem;border-radius:10px;border:1.5px solid var(--border);background:rgba(0,0,0,.3);color:var(--text);font-size:13px}
+    .btn-primary{width:100%;padding:.9rem;border-radius:14px;border:none;background:var(--accent);color:#000;font-weight:700;font-size:15px;cursor:pointer}
+    .btn-ghost{width:100%;padding:.65rem;border-radius:10px;border:1px solid var(--accent);background:rgba(0,255,133,.08);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer}
+    .btn-outline{padding:.4rem .9rem;border-radius:20px;border:1.5px solid var(--border);background:transparent;color:var(--muted);font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap}
+    .btn-outline.active{border-color:var(--accent);background:rgba(0,255,133,.15);color:var(--accent)}
+    #toast-container{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+    .toast{padding:.7rem 1rem;border-radius:12px;font-weight:600;font-size:13px;max-width:260px;animation:slideIn .3s ease;box-shadow:0 4px 24px rgba(0,0,0,.6)}
+    .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;margin-bottom:1rem}
+    .stat-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:.75rem .4rem;text-align:center}
+    .stat-icon{font-size:18px;margin-bottom:4px}
+    .stat-val{font-family:'Syne',sans-serif;font-size:15px;font-weight:700}
+    .stat-label{font-size:9px;color:var(--muted);margin-top:2px}
+    #auth-screen{min-height:100vh;background:radial-gradient(ellipse at 30% 60%,#0d3520 0%,var(--bg) 65%);display:flex;align-items:center;justify-content:center;padding:1rem}
+    .auth-box{width:100%;max-width:400px;background:rgba(12,31,19,.96);border:1px solid var(--border);border-radius:24px;padding:2.25rem 2rem;box-shadow:0 0 80px rgba(0,255,133,.06);animation:fadeUp .4s ease}
+    .auth-logo{display:inline-flex;align-items:center;justify-content:center;width:70px;height:70px;border-radius:20px;background:linear-gradient(135deg,var(--accent),var(--accent2));font-size:30px;box-shadow:0 0 30px #00ff8544}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .spinner{width:28px;height:28px;border:3px solid var(--border);border-top:3px solid var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+    .center{display:flex;justify-content:center;padding:.75rem}
+    .empty{text-align:center;color:var(--muted);padding:3rem 0}
+    .progress-bar{background:rgba(0,0,0,.4);border-radius:20px;height:10px;overflow:hidden}
+    .progress-fill{height:100%;background:linear-gradient(90deg,var(--win),var(--accent2));border-radius:20px;transition:width 1s ease}
+    .banner-warn{background:var(--warn);padding:.5rem 1rem;text-align:center;font-size:12px;font-weight:700;color:#000}
+    .banner-danger{background:var(--danger);padding:.5rem 1rem;text-align:center;font-size:12px;font-weight:700;color:#000}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:500;display:flex;align-items:flex-end;justify-content:center}
+    .modal-box{background:var(--surface);border:1px solid var(--border);border-radius:24px 24px 0 0;padding:1.5rem;width:100%;max-width:500px;animation:fadeUp .3s ease}
+    .red-flag{background:rgba(255,68,68,.1);border:1px solid rgba(255,68,68,.3);border-radius:12px;padding:.75rem;margin-bottom:.5rem;display:flex;gap:8px;align-items:flex-start}
+    .green-tip{background:rgba(0,255,133,.08);border:1px solid rgba(0,255,133,.2);border-radius:12px;padding:.75rem;margin-bottom:.5rem;display:flex;gap:8px;align-items:flex-start}
+    .ocr-zone{border:2px dashed var(--border);border-radius:14px;padding:2rem 1rem;text-align:center;cursor:pointer;transition:border-color .2s;margin-bottom:.75rem}
+    .ocr-zone:hover{border-color:var(--accent);background:rgba(0,255,133,.04)}
+    textarea.inp-sm{resize:vertical}
   </style>
 </head>
 <body>
-
 <div id="toast-container"></div>
 <div id="auth-screen" style="display:none"></div>
 <div id="app" style="display:none"></div>
-
 <script type="module">
-// ═══════════════════════════════════════════════════════════════
-// SUPABASE
-// ═══════════════════════════════════════════════════════════════
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-
-const SUPA_URL = 'https://mhmcvvfoylbnwqfwioys.supabase.co';
-const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1obWN2dmZveWxibndxZndpb3lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5Mzc3NDUsImV4cCI6MjA5NDUxMzc0NX0.DJx01EDheWCjpq2nkdK0aljTmf9irfTugPhn_fTXSWM';
-const sb = createClient(SUPA_URL, SUPA_KEY);
-
-// ═══════════════════════════════════════════════════════════════
-// CONSTANTS
-// ═══════════════════════════════════════════════════════════════
-const LEAGUES = [
-  { id:'epl',        name:'Premier League',       flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', ok:true  },
-  { id:'laliga',     name:'La Liga',              flag:'🇪🇸', ok:true  },
-  { id:'bundesliga', name:'Bundesliga',           flag:'🇩🇪', ok:true  },
-  { id:'seriea',     name:'Serie A',              flag:'🇮🇹', ok:true  },
-  { id:'ligue1',     name:'Ligue 1',              flag:'🇫🇷', ok:true  },
-  { id:'ucl',        name:'Champions League',     flag:'🏆', ok:true  },
-  { id:'uel',        name:'Europa League',        flag:'🔵', ok:true  },
-  { id:'tpl',        name:'Tanzania PL',          flag:'🇹🇿', ok:true  },
-  { id:'eredivisie', name:'Eredivisie',           flag:'🇳🇱', ok:true  },
-  { id:'saudi',      name:'Saudi Pro League',     flag:'🇸🇦', ok:false },
-  { id:'csl',        name:'Chinese Super League', flag:'🇨🇳', ok:false },
+import{createClient}from'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+const SUPA_URL='https://mhmcvvfoylbnwqfwioys.supabase.co';
+const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1obWN2dmZveWxibndxZndpb3lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5Mzc3NDUsImV4cCI6MjA5NDUxMzc0NX0.DJx01EDheWCjpq2nkdK0aljTmf9irfTugPhn_fTXSWM';
+let GEMINI_KEY='';// Weka key yako: aistudio.google.com
+const sb=createClient(SUPA_URL,SUPA_KEY);
+const MAX_MATCHES=6;
+const LOSS_STREAK_LIMIT=3;
+const LEAGUES=[
+  {id:'epl',name:'Premier League',flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿',region:'Europe'},
+  {id:'laliga',name:'La Liga',flag:'🇪🇸',region:'Europe'},
+  {id:'bundesliga',name:'Bundesliga',flag:'🇩🇪',region:'Europe'},
+  {id:'seriea',name:'Serie A',flag:'🇮🇹',region:'Europe'},
+  {id:'ligue1',name:'Ligue 1',flag:'🇫🇷',region:'Europe'},
+  {id:'ucl',name:'Champions League',flag:'🏆',region:'Europe'},
+  {id:'uel',name:'Europa League',flag:'🔵',region:'Europe'},
+  {id:'uecl',name:'Conference League',flag:'🟢',region:'Europe'},
+  {id:'eredivisie',name:'Eredivisie',flag:'🇳🇱',region:'Europe'},
+  {id:'primeira',name:'Primeira Liga',flag:'🇵🇹',region:'Europe'},
+  {id:'jupiler',name:'Belgian Pro League',flag:'🇧🇪',region:'Europe'},
+  {id:'superlig',name:'Turkish Süper Lig',flag:'🇹🇷',region:'Europe'},
+  {id:'championship',name:'Championship',flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿',region:'Europe'},
+  {id:'scottish',name:'Scottish Premiership',flag:'🏴󠁧󠁢󠁳󠁣󠁴󠁿',region:'Europe'},
+  {id:'swiss',name:'Swiss Super League',flag:'🇨🇭',region:'Europe'},
+  {id:'austrian',name:'Austrian Bundesliga',flag:'🇦🇹',region:'Europe'},
+  {id:'greek',name:'Greek Super League',flag:'🇬🇷',region:'Europe'},
+  {id:'danish',name:'Danish Superliga',flag:'🇩🇰',region:'Europe'},
+  {id:'swedish',name:'Allsvenskan',flag:'🇸🇪',region:'Europe'},
+  {id:'norwegian',name:'Eliteserien',flag:'🇳🇴',region:'Europe'},
+  {id:'czech',name:'Czech First League',flag:'🇨🇿',region:'Europe'},
+  {id:'romanian',name:'Liga 1 Romania',flag:'🇷🇴',region:'Europe'},
+  {id:'croatian',name:'HNL Croatia',flag:'🇭🇷',region:'Europe'},
+  {id:'serbian',name:'SuperLiga Serbia',flag:'🇷🇸',region:'Europe'},
+  {id:'rpl',name:'Russian Premier League',flag:'🇷🇺',region:'Europe'},
+  {id:'ekstraklasa',name:'Ekstraklasa Poland',flag:'🇵🇱',region:'Europe'},
+  {id:'tpl',name:'Tanzania Premier League',flag:'🇹🇿',region:'Africa'},
+  {id:'kpl',name:'Kenya Premier League',flag:'🇰🇪',region:'Africa'},
+  {id:'npfl',name:'Nigeria Premier League',flag:'🇳🇬',region:'Africa'},
+  {id:'psl',name:'South Africa PSL',flag:'🇿🇦',region:'Africa'},
+  {id:'egypt',name:'Egyptian Premier League',flag:'🇪🇬',region:'Africa'},
+  {id:'caf',name:'CAF Champions League',flag:'🌍',region:'Africa'},
+  {id:'ghana',name:'Ghana Premier League',flag:'🇬🇭',region:'Africa'},
+  {id:'uganda',name:'Uganda Premier League',flag:'🇺🇬',region:'Africa'},
+  {id:'rwanda',name:'Rwanda National League',flag:'🇷🇼',region:'Africa'},
+  {id:'zambia',name:'Zambia Super League',flag:'🇿🇲',region:'Africa'},
+  {id:'morocco',name:'Botola Pro Morocco',flag:'🇲🇦',region:'Africa'},
+  {id:'ethiopia',name:'Ethiopian Premier League',flag:'🇪🇹',region:'Africa'},
+  {id:'mls',name:'MLS USA',flag:'🇺🇸',region:'Americas'},
+  {id:'brasileirao',name:'Brasileirao Brazil',flag:'🇧🇷',region:'Americas'},
+  {id:'liga_mx',name:'Liga MX Mexico',flag:'🇲🇽',region:'Americas'},
+  {id:'argentina',name:'Liga Argentina',flag:'🇦🇷',region:'Americas'},
+  {id:'colombia',name:'Liga BetPlay Colombia',flag:'🇨🇴',region:'Americas'},
+  {id:'chile',name:'Primera Division Chile',flag:'🇨🇱',region:'Americas'},
+  {id:'jleague',name:'J-League Japan',flag:'🇯🇵',region:'Asia'},
+  {id:'kleague',name:'K-League Korea',flag:'🇰🇷',region:'Asia'},
+  {id:'csl',name:'Chinese Super League',flag:'🇨🇳',region:'Asia'},
+  {id:'isl',name:'Indian Super League',flag:'🇮🇳',region:'Asia'},
+  {id:'saudi',name:'Saudi Pro League',flag:'🇸🇦',region:'Asia'},
+  {id:'uae',name:'UAE Pro League',flag:'🇦🇪',region:'Asia'},
+  {id:'qatar',name:'Qatar Stars League',flag:'🇶🇦',region:'Asia'},
 ];
-const MARKETS = ['Double Chance','1X2','Over 2.5','Under 2.5','BTTS','Over 1.5','Draw No Bet','Handicap'];
+const MARKETS=[
+  '1X2','Double Chance','Draw No Bet',
+  'Over 0.5','Over 1.5','Over 2.5','Over 3.5','Over 4.5','Over 5.5',
+  'Under 0.5','Under 1.5','Under 2.5','Under 3.5','Under 4.5','Under 5.5',
+  'BTTS - Yes','BTTS - No',
+  'HT/FT','1st Half 1X2','1st Half Double Chance',
+  '1st Half Over 0.5','1st Half Over 1.5','1st Half Over 2.5',
+  '2nd Half Over 0.5','2nd Half Over 1.5',
+  'Asian Handicap','European Handicap',
+  'Corners Over 8.5','Corners Over 9.5','Corners Over 10.5',
+  'Cards Over 2.5','Cards Over 3.5','Cards Over 4.5',
+  'Correct Score','Anytime Scorer','Clean Sheet',
+];
+const ROLES={owner:'👑 Owner',analyst:'🔍 Analyst',viewer:'👁️ Viewer'};
+const uid=()=>crypto.randomUUID();
+const today=()=>new Date().toISOString().split('T')[0];
+const fmt=(n)=>Math.round(Number(n)).toLocaleString();
+const clamp=(v,a,b)=>Math.min(Math.max(v,a),b);
+const kelly=(odds,p)=>{const b=odds-1,q=1-p,k=(b*p-q)/b;return Math.min(Math.max(k*0.25,0),0.2);};
+const genOTP=()=>Math.floor(100000+Math.random()*900000).toString();
+const el=(id)=>document.getElementById(id);
+const lgName=(id)=>LEAGUES.find(l=>l.id===id)?.name||id;
+const lgFlag=(id)=>LEAGUES.find(l=>l.id===id)?.flag||'🌐';
+const sc=(s)=>s==='WON'?'var(--win)':s==='LOST'?'var(--loss)':s==='PENDING'?'var(--warn)':'#888';
+let currentUser=null,mikeka=[],allMikeka=[],realtimeChannel=null,currentTab='home';
 
-// ═══════════════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════════════
-const uid     = () => crypto.randomUUID();
-const today   = () => new Date().toISOString().split('T')[0];
-const fmt     = (n) => Math.round(Number(n)).toLocaleString();
-const pct     = (a,b) => b===0 ? '0.0%' : ((a/b)*100).toFixed(1)+'%';
-const kelly   = (odds, p) => { const b=odds-1,q=1-p,k=(b*p-q)/b; return Math.min(Math.max(k*0.25,0),0.2); };
-const genOTP  = () => Math.floor(100000+Math.random()*900000).toString();
-const el      = (id) => document.getElementById(id);
-const clamp   = (v,a,b) => Math.min(Math.max(v,a),b);
-
-// State
-let currentUser = null;
-let mikeka      = [];
-let realtimeChannel = null;
-
-// ═══════════════════════════════════════════════════════════════
 // TOAST
-// ═══════════════════════════════════════════════════════════════
-function toast(msg, type='ok') {
-  const colors = { ok: 'var(--accent)', err: 'var(--danger)', warn: 'var(--warn)' };
-  const div = document.createElement('div');
-  div.className = 'toast';
-  div.style.background = colors[type] || colors.ok;
-  div.style.color = '#000';
-  div.textContent = msg;
+function toast(msg,type='ok'){
+  const colors={ok:'var(--accent)',err:'var(--danger)',warn:'var(--warn)',info:'var(--info)'};
+  const div=document.createElement('div');
+  div.className='toast';div.style.background=colors[type]||colors.ok;
+  div.style.color=type==='info'?'#fff':'#000';div.textContent=msg;
   el('toast-container').appendChild(div);
-  setTimeout(() => div.remove(), 3500);
+  setTimeout(()=>div.remove(),3500);
 }
 
-// ═══════════════════════════════════════════════════════════════
-// AUTH SCREEN
-// ═══════════════════════════════════════════════════════════════
-function showAuth(mode='login') {
-  el('app').style.display = 'none';
-  el('auth-screen').style.display = 'flex';
-
-  let sentOTP = null;
-  let pendingData = null;
-
-  const render = (m) => {
-    mode = m;
-    el('auth-screen').innerHTML = `
+// AUTH
+function showAuth(mode='login'){
+  el('app').style.display='none';el('auth-screen').style.display='flex';
+  let sentOTP=null,pendingData=null;
+  const render=(m)=>{
+    mode=m;
+    el('auth-screen').innerHTML=`
       <div class="auth-box">
-        <div style="text-align:center; margin-bottom:2rem">
+        <div style="text-align:center;margin-bottom:1.75rem">
           <div class="auth-logo">📊</div>
-          <div style="font-family:'Syne',sans-serif; font-size:26px; font-weight:800; color:var(--accent); letter-spacing:-1px; margin-top:.75rem">NJEM Tipps</div>
-          <div style="font-size:12px; color:var(--muted); margin-top:4px">Smart Investor · Not Gambler</div>
+          <div style="font-family:'Syne',sans-serif;font-size:26px;font-weight:800;color:var(--accent);margin-top:.75rem;letter-spacing:-1px">NJEM Tipps</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">Smart Investor · Not Gambler · v2.0</div>
         </div>
         <div id="auth-form"></div>
-      </div>
-    `;
-    renderForm(m);
-  };
-
-  const renderForm = (m) => {
-    const f = el('auth-form');
-
-    if (m === 'register') {
-      f.innerHTML = `
-        <div style="font-family:'Syne',sans-serif; font-size:18px; font-weight:700; margin-bottom:12px">Fungua Akaunti</div>
+      </div>`;
+    const f=el('auth-form');
+    if(m==='register'){
+      f.innerHTML=`
+        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:12px">Fungua Akaunti</div>
         <input class="inp" id="r-name" placeholder="Jina lako kamili" style="margin-bottom:10px"/>
         <input class="inp" id="r-phone" placeholder="Namba ya simu (0712...)" type="tel" style="margin-bottom:10px"/>
         <input class="inp" id="r-pass" placeholder="Nenosiri (min 6)" type="password" style="margin-bottom:10px"/>
         <input class="inp" id="r-confirm" placeholder="Thibitisha nenosiri" type="password" style="margin-bottom:14px"/>
         <button class="btn-primary" id="r-btn">Pata OTP →</button>
-        <p style="text-align:center; font-size:13px; color:var(--muted); margin-top:12px">
-          Una akaunti? <span id="go-login" style="color:var(--accent); cursor:pointer; font-weight:600">Ingia</span>
-        </p>
-      `;
-      el('go-login').onclick = () => render('login');
-      el('r-btn').onclick = async () => {
-        const name    = el('r-name').value.trim();
-        const phone   = el('r-phone').value.replace(/\D/g,'');
-        const pass    = el('r-pass').value;
-        const confirm = el('r-confirm').value;
-        if (!name||!phone||!pass||!confirm) return toast('Jaza sehemu zote!','err');
-        if (pass.length<6) return toast('Nenosiri lazima liwe angalau herufi 6!','err');
-        if (pass!==confirm) return toast('Manenosiri hayafanani!','err');
-        if (phone.length<9) return toast('Namba ya simu si sahihi!','err');
-        el('r-btn').textContent = 'Inaangalia...';
-        el('r-btn').disabled = true;
-        const { data:existing } = await sb.from('users').select('id').eq('phone',phone).maybeSingle();
-        if (existing) { el('r-btn').textContent='Pata OTP →'; el('r-btn').disabled=false; return toast('Namba hii imeshasajiliwa!','err'); }
-        sentOTP = genOTP();
-        pendingData = { name, phone, password: pass };
-        el('r-btn').textContent='Pata OTP →'; el('r-btn').disabled=false;
-        toast(`📱 OTP yako: ${sentOTP}  (Demo mode)`,'warn');
-        render('otp');
+        <p style="text-align:center;font-size:13px;color:var(--muted);margin-top:12px">Una akaunti? <span id="go-login" style="color:var(--accent);cursor:pointer;font-weight:600">Ingia</span></p>`;
+      el('go-login').onclick=()=>render('login');
+      el('r-btn').onclick=async()=>{
+        const name=el('r-name').value.trim(),phone=el('r-phone').value.replace(/\D/g,'');
+        const pass=el('r-pass').value,confirm=el('r-confirm').value;
+        if(!name||!phone||!pass||!confirm)return toast('Jaza sehemu zote!','err');
+        if(pass.length<6)return toast('Nenosiri min herufi 6!','err');
+        if(pass!==confirm)return toast('Manenosiri hayafanani!','err');
+        if(phone.length<9)return toast('Namba ya simu si sahihi!','err');
+        el('r-btn').textContent='Inaangalia...';el('r-btn').disabled=true;
+        const{data:ex}=await sb.from('users').select('id').eq('phone',phone).maybeSingle();
+        if(ex){el('r-btn').textContent='Pata OTP →';el('r-btn').disabled=false;return toast('Namba hii imeshasajiliwa!','err');}
+        sentOTP=genOTP();pendingData={name,phone,password:pass};
+        el('r-btn').textContent='Pata OTP →';el('r-btn').disabled=false;
+        toast('📱 OTP yako: '+sentOTP,'warn');render('otp');
       };
-    }
-
-    else if (m === 'otp') {
-      f.innerHTML = `
-        <div style="font-family:'Syne',sans-serif; font-size:18px; font-weight:700; margin-bottom:12px">Thibitisha OTP</div>
-        <div style="background:rgba(0,255,133,.06); border:1px solid var(--border); border-radius:10px; padding:.75rem; font-size:12px; color:var(--muted); margin-bottom:12px">
+    }else if(m==='otp'){
+      f.innerHTML=`
+        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:12px">Thibitisha OTP</div>
+        <div style="background:rgba(0,255,133,.06);border:1px solid var(--border);border-radius:10px;padding:.75rem;font-size:12px;color:var(--muted);margin-bottom:12px">
           📱 OTP imetumwa kwa <strong style="color:var(--accent)">${pendingData?.phone}</strong><br>
-          <em style="font-size:11px">(Demo: OTP ipo kwenye notification ya juu)</em>
+          <em style="font-size:11px">(Demo: OTP ipo kwenye notification)</em>
         </div>
-        <input class="inp" id="otp-val" placeholder="○ ○ ○ ○ ○ ○" type="number" maxlength="6"
-          style="text-align:center; font-size:22px; letter-spacing:8px; margin-bottom:12px"/>
+        <input class="inp" id="otp-val" placeholder="○ ○ ○ ○ ○ ○" type="number" style="text-align:center;font-size:22px;letter-spacing:8px;margin-bottom:12px"/>
         <button class="btn-primary" id="otp-btn">✓ Thibitisha</button>
-        <div style="display:flex; justify-content:space-between; margin-top:12px; font-size:13px">
-          <span id="go-reg" style="color:var(--muted); cursor:pointer">← Rudi</span>
-          <span id="resend" style="color:var(--accent); cursor:pointer">Tuma tena OTP</span>
-        </div>
-      `;
-      el('go-reg').onclick = () => render('register');
-      el('resend').onclick = () => { sentOTP=genOTP(); toast(`OTP mpya: ${sentOTP}`,'warn'); };
-      el('otp-btn').onclick = async () => {
-        const val = el('otp-val').value.trim();
-        if (val !== sentOTP) return toast('OTP si sahihi!','err');
-        el('otp-btn').textContent='Inasajili...'; el('otp-btn').disabled=true;
-        const { data, error } = await sb.from('users').insert({
-          id: uid(), name: pendingData.name, phone: pendingData.phone,
-          password: pendingData.password, role: 'user', bankroll: 50000, stake: 5000
+        <div style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px">
+          <span id="go-back" style="color:var(--muted);cursor:pointer">← Rudi</span>
+          <span id="resend-btn" style="color:var(--accent);cursor:pointer">Tuma tena OTP</span>
+        </div>`;
+      el('go-back').onclick=()=>render('register');
+      el('resend-btn').onclick=()=>{sentOTP=genOTP();toast('OTP mpya: '+sentOTP,'warn');};
+      el('otp-btn').onclick=async()=>{
+        if(el('otp-val').value.trim()!==sentOTP)return toast('OTP si sahihi!','err');
+        el('otp-btn').textContent='Inasajili...';el('otp-btn').disabled=true;
+        const{count}=await sb.from('users').select('*',{count:'exact',head:true});
+        const role=(!count||count===0)?'owner':'viewer';
+        const{data,error}=await sb.from('users').insert({
+          id:uid(),name:pendingData.name,phone:pendingData.phone,
+          password:pendingData.password,role,bankroll:50000,stake:5000
         }).select().single();
-        el('otp-btn').textContent='✓ Thibitisha'; el('otp-btn').disabled=false;
-        if (error) return toast('Hitilafu: '+error.message,'err');
-        toast('Akaunti imefunguliwa! 🎉');
-        setTimeout(() => loginUser(data), 600);
+        el('otp-btn').textContent='✓ Thibitisha';el('otp-btn').disabled=false;
+        if(error)return toast('Hitilafu: '+error.message,'err');
+        toast('Akaunti imefunguliwa! 🎉');setTimeout(()=>loginUser(data),600);
       };
-    }
-
-    else if (m === 'login') {
-      f.innerHTML = `
-        <div style="font-family:'Syne',sans-serif; font-size:18px; font-weight:700; margin-bottom:12px">Ingia</div>
+    }else if(m==='login'){
+      f.innerHTML=`
+        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:12px">Ingia</div>
         <input class="inp" id="l-phone" placeholder="Namba ya simu" type="tel" style="margin-bottom:10px"/>
         <input class="inp" id="l-pass" placeholder="Nenosiri" type="password" style="margin-bottom:14px"/>
         <button class="btn-primary" id="l-btn">Ingia →</button>
-        <p style="text-align:center; font-size:13px; color:var(--muted); margin-top:12px">
-          Huna akaunti? <span id="go-reg2" style="color:var(--accent); cursor:pointer; font-weight:600">Sajili</span>
-        </p>
-      `;
-      el('go-reg2').onclick = () => render('register');
-      el('l-btn').onclick = async () => {
-        const phone = el('l-phone').value.replace(/\D/g,'');
-        const pass  = el('l-pass').value;
-        if (!phone||!pass) return toast('Jaza sehemu zote!','err');
-        el('l-btn').textContent='Inaingia...'; el('l-btn').disabled=true;
-        const { data, error } = await sb.from('users').select('*').eq('phone',phone).eq('password',pass).maybeSingle();
-        el('l-btn').textContent='Ingia →'; el('l-btn').disabled=false;
-        if (error||!data) return toast('Namba au nenosiri si sahihi!','err');
-        toast('Karibu! 👋');
-        setTimeout(() => loginUser(data), 400);
+        <p style="text-align:center;font-size:13px;color:var(--muted);margin-top:12px">Huna akaunti? <span id="go-reg" style="color:var(--accent);cursor:pointer;font-weight:600">Sajili</span></p>`;
+      el('go-reg').onclick=()=>render('register');
+      el('l-btn').onclick=async()=>{
+        const phone=el('l-phone').value.replace(/\D/g,''),pass=el('l-pass').value;
+        if(!phone||!pass)return toast('Jaza sehemu zote!','err');
+        el('l-btn').textContent='Inaingia...';el('l-btn').disabled=true;
+        const{data,error}=await sb.from('users').select('*').eq('phone',phone).eq('password',pass).maybeSingle();
+        el('l-btn').textContent='Ingia →';el('l-btn').disabled=false;
+        if(error||!data)return toast('Namba au nenosiri si sahihi!','err');
+        toast('Karibu! 👋');setTimeout(()=>loginUser(data),400);
       };
     }
   };
-
   render(mode);
 }
 
-// ═══════════════════════════════════════════════════════════════
-// LOGIN & LOGOUT
-// ═══════════════════════════════════════════════════════════════
-async function loginUser(user) {
-  currentUser = user;
-  el('auth-screen').style.display = 'none';
-  el('app').style.display = 'block';
-  await loadMikeka();
-  startRealtime();
-  renderShell();
-  showTab('home');
+async function loginUser(user){
+  currentUser=user;
+  el('auth-screen').style.display='none';el('app').style.display='block';
+  await loadData();startRealtime();renderShell();showTab('home');
+}
+function logout(){
+  if(realtimeChannel)sb.removeChannel(realtimeChannel);
+  currentUser=null;mikeka=[];allMikeka=[];
+  el('app').style.display='none';showAuth('login');
+}
+async function updateUser(updates){
+  const{data}=await sb.from('users').update(updates).eq('id',currentUser.id).select().single();
+  if(data){currentUser=data;const c=el('bankroll-val');if(c)c.textContent='💰 '+fmt(data.bankroll);}
+}
+async function loadData(){
+  const{data:my}=await sb.from('mikeka').select('*,matches(*)').eq('user_id',currentUser.id).order('created_at',{ascending:false});
+  mikeka=my||[];
+  const{data:all}=await sb.from('mikeka').select('*,matches(*),users(name,role)').order('created_at',{ascending:false}).limit(50);
+  allMikeka=all||[];
+}
+function startRealtime(){
+  realtimeChannel=sb.channel('njem-v2')
+    .on('postgres_changes',{event:'*',schema:'public',table:'mikeka'},async()=>{
+      await loadData();
+      if(['home','feed','mikeka','results'].includes(currentTab))showTab(currentTab);
+    }).subscribe();
+}
+function getStreak(){
+  const s=[...mikeka].filter(m=>m.status!=='PENDING'&&m.status!=='VOID');
+  if(!s.length)return{type:'none',count:0};
+  const t=s[0].status==='WON'?'WIN':'LOSS';let c=0;
+  for(const m of s){if((m.status==='WON')===(t==='WIN'))c++;else break;}
+  return{type:t,count:c};
+}
+function analyzeRisk(matches){
+  const flags=[],tips=[];
+  const totalOdds=matches.reduce((p,m)=>p*(parseFloat(m.odds)||1),1);
+  if(matches.length>4)flags.push({icon:'⚠️',msg:`Mechi ${matches.length} — chances za kupoteza zinaongezeka`});
+  if(totalOdds>20)flags.push({icon:'🔴',msg:`Odds ${totalOdds.toFixed(2)} ni kubwa mno!`});
+  matches.forEach(m=>{
+    if(parseFloat(m.odds)<1.2)flags.push({icon:'⚠️',msg:`${m.teams||'Mechi'}: Odds ${m.odds} — value si nzuri`});
+    if(parseFloat(m.odds)>5)flags.push({icon:'🔴',msg:`${m.teams||'Mechi'}: Odds ${m.odds} — hatari!`});
+  });
+  const streak=getStreak();
+  if(streak.type==='LOSS'&&streak.count>=2)flags.push({icon:'🚨',msg:`Loss streak ${streak.count} — fikiria vizuri!`});
+  const lgMap={};
+  mikeka.forEach(mk=>(mk.matches||[]).forEach(match=>{
+    if(!lgMap[match.league])lgMap[match.league]={w:0,l:0,t:0};
+    lgMap[match.league].t++;
+    if(match.outcome==='WIN')lgMap[match.league].w++;
+    if(match.outcome==='LOSS')lgMap[match.league].l++;
+  }));
+  matches.forEach(m=>{
+    const lg=lgMap[m.league];
+    if(lg&&lg.t>=3){
+      const wr=(lg.w/lg.t)*100;
+      if(wr<30)flags.push({icon:'📊',msg:`${lgName(m.league)}: Win rate ${wr.toFixed(0)}% — league hii inakuchania!`});
+      if(wr>60)tips.push({icon:'✅',msg:`${lgName(m.league)}: Win rate ${wr.toFixed(0)}% — league nzuri kwako!`});
+    }
+  });
+  const mkMap={};
+  mikeka.forEach(mk=>(mk.matches||[]).forEach(match=>{
+    if(!mkMap[match.market])mkMap[match.market]={w:0,t:0};
+    mkMap[match.market].t++;
+    if(match.outcome==='WIN')mkMap[match.market].w++;
+  }));
+  const best=Object.entries(mkMap).filter(([,v])=>v.t>=3).sort((a,b)=>(b[1].w/b[1].t)-(a[1].w/a[1].t))[0];
+  if(best)tips.push({icon:'💡',msg:`Market bora kwako: ${best[0]} (${((best[1].w/best[1].t)*100).toFixed(0)}% win)`});
+  return{flags,tips,totalOdds};
+}
+async function ocrImage(base64,mimeType){
+  if(!GEMINI_KEY){toast('Weka Gemini API key kwenye Admin → Settings','err');return[];}
+  try{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[
+        {text:'Extract all matches from this betslip image. Return ONLY a JSON array: [{"teams":"TeamA vs TeamB","market":"1X2","pick":"1","odds":"1.85"}]. No explanation.'},
+        {inline_data:{mime_type:mimeType,data:base64}}
+      ]}]})
+    });
+    const data=await res.json();
+    const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'[]';
+    return JSON.parse(text.replace(/```json|```/g,'').trim());
+  }catch(e){toast('OCR imeshindwa','err');return[];}
 }
 
-function logout() {
-  if (realtimeChannel) sb.removeChannel(realtimeChannel);
-  currentUser = null; mikeka = [];
-  el('app').style.display = 'none';
-  showAuth('login');
-}
-
-async function updateUser(updates) {
-  const { data } = await sb.from('users').update(updates).eq('id', currentUser.id).select().single();
-  if (data) { currentUser = data; el('bankroll-val').textContent = '💰 ' + fmt(data.bankroll); }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// DATA
-// ═══════════════════════════════════════════════════════════════
-async function loadMikeka() {
-  const { data, error } = await sb.from('mikeka')
-    .select('*, matches(*)')
-    .eq('user_id', currentUser.id)
-    .order('created_at', { ascending: false });
-  if (!error && data) mikeka = data;
-}
-
-function startRealtime() {
-  realtimeChannel = sb.channel('njem-live')
-    .on('postgres_changes', { event:'*', schema:'public', table:'mikeka', filter:`user_id=eq.${currentUser.id}` },
-      async () => { await loadMikeka(); refreshCurrentTab(); })
-    .subscribe();
-}
-
-let currentTab = 'home';
-function refreshCurrentTab() { showTab(currentTab); }
-
-// ═══════════════════════════════════════════════════════════════
 // SHELL
-// ═══════════════════════════════════════════════════════════════
-function renderShell() {
-  const tabs = [
-    { id:'home',    icon:'🏠', label:'Home'    },
-    { id:'mikeka',  icon:'📋', label:'Mikeka'  },
-    { id:'post',    icon:'➕', label:'Weka'    },
-    { id:'results', icon:'✅', label:'Results' },
-    { id:'reports', icon:'📊', label:'Ripoti'  },
+function renderShell(){
+  const isOwner=currentUser.role==='owner';
+  const isAnalyst=currentUser.role==='analyst'||isOwner;
+  const tabs=[
+    {id:'home',icon:'🏠',label:'Home'},
+    {id:'feed',icon:'📡',label:'Feed'},
+    {id:'mikeka',icon:'📋',label:'Mikeka'},
+    ...(isAnalyst?[{id:'post',icon:'➕',label:'Weka'}]:[]),
+    {id:'reports',icon:'📊',label:'Ripoti'},
+    ...(isOwner?[{id:'admin',icon:'⚙️',label:'Admin'}]:[]),
   ];
-  if (currentUser.role === 'admin') tabs.push({ id:'admin', icon:'⚙️', label:'Admin' });
-
-  el('app').innerHTML = `
-    <!-- Banner -->
+  el('app').innerHTML=`
     <div id="streak-banner" style="display:none"></div>
-
-    <!-- Header -->
     <div class="header">
       <div>
         <div class="header-title">NJEM Tipps</div>
-        <div class="header-sub" id="header-sub">Habari, ${currentUser.name.split(' ')[0]} ${currentUser.role==='admin'?'👑':'👋'}</div>
+        <div class="header-sub">
+          ${currentUser.name.split(' ')[0]}
+          <span style="background:rgba(0,255,133,.15);color:var(--accent);padding:.1rem .4rem;border-radius:8px;font-size:9px;margin-left:4px">${ROLES[currentUser.role]||currentUser.role}</span>
+        </div>
       </div>
-      <div style="display:flex; gap:8px; align-items:center">
-        <div class="bankroll-chip" id="bankroll-val">💰 ${fmt(currentUser.bankroll)}</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div class="bankroll-chip" id="bankroll-val" onclick="window._bk()">💰 ${fmt(currentUser.bankroll)}</div>
         <button class="logout-btn" onclick="window._logout()">⏻</button>
       </div>
     </div>
-
-    <!-- Content -->
     <div id="content" style="padding:1rem"></div>
-
-    <!-- Bottom Nav -->
-    <nav class="bottom-nav" id="bottom-nav">
-      ${tabs.map(t => `
-        <button class="nav-btn" onclick="window._tab('${t.id}')">
-          <span class="nav-icon inactive" id="nav-icon-${t.id}">${t.icon}</span>
-          <span class="nav-label" id="nav-label-${t.id}">${t.label}</span>
-        </button>
-      `).join('')}
-    </nav>
-  `;
-
-  window._logout = logout;
-  window._tab    = showTab;
+    <nav class="bottom-nav">
+      ${tabs.map(t=>`<button class="nav-btn" onclick="window._tab('${t.id}')"><span class="nav-icon inactive" id="ni-${t.id}">${t.icon}</span><span class="nav-label" id="nl-${t.id}">${t.label}</span></button>`).join('')}
+    </nav>`;
+  window._logout=logout;window._tab=showTab;window._bk=showBankrollModal;
+}
+function updateNav(tab){
+  document.querySelectorAll('.nav-icon').forEach(e=>{e.classList.remove('active');e.classList.add('inactive');});
+  document.querySelectorAll('.nav-label').forEach(e=>e.classList.remove('active'));
+  const ic=el('ni-'+tab),lb=el('nl-'+tab);
+  if(ic){ic.classList.remove('inactive');ic.classList.add('active');}
+  if(lb)lb.classList.add('active');
+}
+function showTab(tab){
+  currentTab=tab;updateNav(tab);
+  const s=getStreak(),b=el('streak-banner');
+  if(b){
+    if(s.type==='LOSS'&&s.count>=2){
+      b.style.display='block';b.className=s.count>=LOSS_STREAK_LIMIT?'banner-danger':'banner-warn';
+      b.textContent=s.count>=LOSS_STREAK_LIMIT?`🚨 SIMAMA! Loss streak ${s.count}! Pumzika leo`:`⚠️ Loss streak ${s.count}. Kuwa makini!`;
+    }else b.style.display='none';
+  }
+  const c=el('content');c.className='fadeUp';void c.offsetWidth;
+  if(tab==='home')renderHome(c);
+  if(tab==='feed')renderFeed(c);
+  if(tab==='mikeka')renderMikeka(c);
+  if(tab==='post')renderPost(c);
+  if(tab==='results')renderResults(c);
+  if(tab==='reports')renderReports(c);
+  if(tab==='admin')renderAdmin(c);
 }
 
-function updateNav(tab) {
-  document.querySelectorAll('.nav-icon').forEach(e => { e.classList.remove('active'); e.classList.add('inactive'); });
-  document.querySelectorAll('.nav-label').forEach(e => { e.classList.remove('active'); });
-  const ic = el(`nav-icon-${tab}`); const lb = el(`nav-label-${tab}`);
-  if (ic) { ic.classList.remove('inactive'); ic.classList.add('active'); }
-  if (lb) lb.classList.add('active');
+// BANKROLL MODAL
+function showBankrollModal(){
+  if(currentUser.role!=='owner')return toast('Wewe ni '+ROLES[currentUser.role]+' — huwezi kubadilisha bankroll','err');
+  const ov=document.createElement('div');ov.className='modal-overlay';
+  ov.innerHTML=`
+    <div class="modal-box">
+      <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:4px">💰 Bankroll</div>
+      <div style="font-size:28px;font-weight:800;color:var(--accent);margin-bottom:1rem">TZS ${fmt(currentUser.bankroll)}</div>
+      <div class="grid-2" style="margin-bottom:1rem">
+        <button onclick="window._bkAction('add')" style="padding:.75rem;border-radius:12px;border:none;background:var(--win);color:#000;font-weight:700;cursor:pointer;font-size:14px">➕ Ongeza</button>
+        <button onclick="window._bkAction('withdraw')" style="padding:.75rem;border-radius:12px;border:none;background:var(--danger);color:#fff;font-weight:700;cursor:pointer;font-size:14px">➖ Toa</button>
+      </div>
+      <div id="bk-area"></div>
+      <button onclick="this.closest('.modal-overlay').remove()" style="width:100%;padding:.65rem;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:13px;margin-top:.5rem">Funga</button>
+    </div>`;
+  document.body.appendChild(ov);ov.onclick=(e)=>{if(e.target===ov)ov.remove();};
+  window._bkAction=(type)=>{
+    el('bk-area').innerHTML=`
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">${type==='add'?'Kiasi cha Kuongeza':'Kiasi cha Kutoa'} (TZS)</div>
+      <input class="inp" id="bk-amt" type="number" placeholder="e.g. 10000" style="margin-bottom:8px"/>
+      <input class="inp" id="bk-note" placeholder="Maelezo (Deposit / Withdraw)" style="margin-bottom:10px"/>
+      <button onclick="window._bkConfirm('${type}')" style="width:100%;padding:.75rem;border-radius:12px;border:none;background:${type==='add'?'var(--win)':'var(--danger)'};color:${type==='add'?'#000':'#fff'};font-weight:700;cursor:pointer">${type==='add'?'Ongeza':'Toa'}</button>`;
+  };
+  window._bkConfirm=async(type)=>{
+    const amt=parseFloat(el('bk-amt')?.value||0);
+    if(!amt||amt<=0)return toast('Weka kiasi sahihi!','err');
+    if(type==='withdraw'&&amt>currentUser.bankroll)return toast('Huna pesa za kutosha!','err');
+    const newBk=type==='add'?currentUser.bankroll+amt:currentUser.bankroll-amt;
+    await updateUser({bankroll:newBk});
+    await sb.from('transactions').insert({id:uid(),user_id:currentUser.id,type,amount:amt,note:el('bk-note')?.value||'',balance_after:newBk}).catch(()=>{});
+    toast(type==='add'?`✅ Imeongezwa TZS ${fmt(amt)}`:`✅ Imetolewa TZS ${fmt(amt)}`);
+    ov.remove();showTab(currentTab);
+  };
 }
 
-function showTab(tab) {
-  currentTab = tab;
-  updateNav(tab);
-  updateStreakBanner();
-  const c = el('content');
-  c.className = 'fadeUp';
-  void c.offsetWidth; // reflow for animation
-  if (tab==='home')    renderHome(c);
-  if (tab==='mikeka')  renderMikeka(c);
-  if (tab==='post')    renderPost(c);
-  if (tab==='results') renderResults(c);
-  if (tab==='reports') renderReports(c);
-  if (tab==='admin')   renderAdmin(c);
-}
-
-function updateStreakBanner() {
-  const streak = getStreak();
-  const b = el('streak-banner');
-  if (!b) return;
-  if (streak.type==='LOSS' && streak.count>=2) {
-    b.style.display='block';
-    b.className = streak.count>=3 ? 'banner-danger' : 'banner-warn';
-    b.textContent = streak.count>=3
-      ? `🚨 SIMAMA! Loss streak ${streak.count}! Pumzika leo — NJEM Rule`
-      : `⚠️ Loss streak ${streak.count}. Kuwa makini sana!`;
-  } else { b.style.display='none'; }
-}
-
-function getStreak() {
-  const s = [...mikeka].filter(m=>m.status!=='PENDING'&&m.status!=='VOID');
-  if (!s.length) return {type:'none',count:0};
-  const t = s[0].status==='WON'?'WIN':'LOSS';
-  let c=0; for(const m of s){ if((m.status==='WON')===(t==='WIN')) c++; else break; }
-  return {type:t, count:c};
-}
-
-// ═══════════════════════════════════════════════════════════════
-// HOME TAB
-// ═══════════════════════════════════════════════════════════════
-function renderHome(c) {
-  const won     = mikeka.filter(m=>m.status==='WON');
-  const lost    = mikeka.filter(m=>m.status==='LOST');
-  const settled = [...won,...lost];
-  const staked  = mikeka.reduce((s,m)=>s+(m.stake||0),0);
-  const ret     = won.reduce((s,m)=>s+(m.potential_return||0),0);
-  const profit  = ret - staked;
-  const roi     = staked>0 ? ((profit/staked)*100).toFixed(1) : '0.0';
-  const wr      = settled.length>0 ? ((won.length/settled.length)*100).toFixed(1) : '0.0';
-  const pending = mikeka.filter(m=>m.status==='PENDING');
-  const streak  = getStreak();
-
-  const pfColor  = profit>=0?'var(--win)':'var(--loss)';
-  const roiColor = parseFloat(roi)>=0?'var(--win)':'var(--loss)';
-  const wrColor  = parseFloat(wr)>=50?'var(--win)':'var(--loss)';
-
-  c.innerHTML = `
-    <!-- Bankroll Hero -->
-    <div class="card-hero glow" style="margin-bottom:1rem">
-      <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px">Bankroll Yako</div>
-      <div style="font-family:'Syne',sans-serif; font-size:38px; font-weight:800; color:var(--accent); letter-spacing:-1px">TZS ${fmt(currentUser.bankroll)}</div>
-      <div style="display:flex; gap:1.5rem; margin-top:10px">
-        <div><div style="font-size:10px;color:var(--muted)">Faida</div><div style="font-size:15px;font-weight:700;color:${pfColor}">${profit>=0?'+':''}${fmt(profit)}</div></div>
-        <div><div style="font-size:10px;color:var(--muted)">ROI</div><div style="font-size:15px;font-weight:700;color:${roiColor}">${roi}%</div></div>
+// HOME
+function renderHome(c){
+  const won=mikeka.filter(m=>m.status==='WON'),lost=mikeka.filter(m=>m.status==='LOST'),settled=[...won,...lost];
+  const staked=mikeka.reduce((s,m)=>s+(m.stake||0),0);
+  const ret=won.reduce((s,m)=>s+(m.potential_return||0),0);
+  const profit=ret-staked,roi=staked>0?((profit/staked)*100).toFixed(1):'0.0';
+  const wr=settled.length>0?((won.length/settled.length)*100).toFixed(1):'0.0';
+  const pending=mikeka.filter(m=>m.status==='PENDING'),streak=getStreak();
+  const isOwner=currentUser.role==='owner',isAnalyst=currentUser.role==='analyst'||isOwner;
+  c.innerHTML=`
+    <div style="background:linear-gradient(135deg,#0f3520,#092518);border:1px solid rgba(0,255,133,.2);border-radius:20px;padding:1.5rem;margin-bottom:1rem" class="glow">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Bankroll Yako</div>
+      <div style="font-family:'Syne',sans-serif;font-size:38px;font-weight:800;color:var(--accent);letter-spacing:-1px">TZS ${fmt(currentUser.bankroll)}</div>
+      <div style="display:flex;gap:1.5rem;margin-top:10px">
+        <div><div style="font-size:10px;color:var(--muted)">Faida</div><div style="font-size:15px;font-weight:700;color:${profit>=0?'var(--win)':'var(--loss)'}">${profit>=0?'+':''}${fmt(profit)}</div></div>
+        <div><div style="font-size:10px;color:var(--muted)">ROI</div><div style="font-size:15px;font-weight:700;color:${parseFloat(roi)>=0?'var(--win)':'var(--loss)'}">${roi}%</div></div>
         <div><div style="font-size:10px;color:var(--muted)">Pending</div><div style="font-size:15px;font-weight:700;color:var(--warn)">${pending.length}</div></div>
       </div>
+      ${isOwner?`<button onclick="window._bk()" style="margin-top:12px;padding:.4rem 1rem;border-radius:20px;border:1px solid rgba(0,255,133,.3);background:rgba(0,255,133,.08);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer">➕ Ongeza / ➖ Toa</button>`:''}
     </div>
-
-    <!-- Stats -->
     <div class="stats-grid">
       <div class="stat-box"><div class="stat-icon">📋</div><div class="stat-val">${mikeka.length}</div><div class="stat-label">Mikeka</div></div>
       <div class="stat-box"><div class="stat-icon">✅</div><div class="stat-val" style="color:var(--win)">${won.length}</div><div class="stat-label">Imeshinda</div></div>
-      <div class="stat-box"><div class="stat-icon">🎯</div><div class="stat-val" style="color:${wrColor}">${wr}%</div><div class="stat-label">Win Rate</div></div>
-      <div class="stat-box"><div class="stat-icon">📈</div><div class="stat-val" style="color:${roiColor}">${roi}%</div><div class="stat-label">ROI</div></div>
+      <div class="stat-box"><div class="stat-icon">🎯</div><div class="stat-val" style="color:${parseFloat(wr)>=50?'var(--win)':'var(--loss)'}">${wr}%</div><div class="stat-label">Win Rate</div></div>
+      <div class="stat-box"><div class="stat-icon">📈</div><div class="stat-val" style="color:${parseFloat(roi)>=0?'var(--win)':'var(--loss)'}">${roi}%</div><div class="stat-label">ROI</div></div>
     </div>
-
-    <!-- Streak -->
-    ${streak.count>0 && streak.type!=='none' ? `
-    <div style="background:${streak.type==='WIN'?'#0f3520':'#2a0f0f'}; border:1px solid ${streak.type==='WIN'?'rgba(0,255,133,.3)':'rgba(255,68,68,.3)'}; border-radius:16px; padding:1rem; display:flex; align-items:center; gap:12px; margin-bottom:1rem">
+    ${streak.count>0&&streak.type!=='none'?`
+    <div style="background:${streak.type==='WIN'?'#0f3520':'#2a0f0f'};border:1px solid ${streak.type==='WIN'?'rgba(0,255,133,.3)':'rgba(255,68,68,.3)'};border-radius:16px;padding:1rem;display:flex;align-items:center;gap:12px;margin-bottom:1rem">
       <span style="font-size:32px">${streak.type==='WIN'?'🔥':'❄️'}</span>
       <div>
-        <div style="font-weight:700; font-size:14px; color:${streak.type==='WIN'?'var(--win)':'var(--loss)'}">
-          ${streak.type==='WIN'?`Win Streak: ${streak.count} mfululizo! 🎉`:`Loss Streak: ${streak.count} mfululizo`}
-        </div>
-        <div style="font-size:11px; color:var(--muted); margin-top:2px">
-          ${streak.type==='WIN'?'Hongera! Dumisha nidhamu ya NJEM.':streak.count>=3?'Simama leo — NJEM Rule!':'Kuwa makini sana na mkeka ujao.'}
-        </div>
+        <div style="font-weight:700;font-size:14px;color:${streak.type==='WIN'?'var(--win)':'var(--loss)'}">${streak.type==='WIN'?`Win Streak: ${streak.count} 🎉`:`Loss Streak: ${streak.count}`}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${streak.type==='WIN'?'Hongera! Dumisha nidhamu.':streak.count>=LOSS_STREAK_LIMIT?'🚨 Simama leo!':'Kuwa makini sana!'}</div>
       </div>
-    </div>` : ''}
-
-    <!-- Quick Actions -->
-    <div class="grid-2-btn">
-      <button class="btn-primary" onclick="window._tab('post')">➕ Weka Mkeka</button>
-      <button onclick="window._tab('results')" style="padding:.85rem; border-radius:14px; border:1.5px solid var(--border); background:transparent; color:var(--accent); font-weight:700; font-size:13px; cursor:pointer">✅ Matokeo</button>
+    </div>`:''}
+    <div class="grid-2" style="margin-bottom:1rem">
+      ${isAnalyst?`<button onclick="window._tab('post')" style="padding:.85rem;border-radius:14px;border:none;background:var(--accent);color:#000;font-weight:700;font-size:13px;cursor:pointer">➕ Weka Mkeka</button>`:'<div></div>'}
+      <button onclick="window._tab('feed')" style="padding:.85rem;border-radius:14px;border:1.5px solid var(--border);background:transparent;color:var(--accent);font-weight:700;font-size:13px;cursor:pointer">📡 Public Feed</button>
     </div>
-
-    <!-- NJEM Rules -->
     <div class="card">
-      <div style="font-family:'Syne',sans-serif; font-size:13px; font-weight:700; color:var(--accent); margin-bottom:10px">🛡️ NJEM System Rules</div>
-      ${[['✅','Max mechi 4 kwa accumulator'],['✅','Double Chance ni market bora'],['✅','Kelly Criterion kwa staking'],['✅','Cashout @ 70% ya lengo'],['❌','Saudi & CSL — BANNED'],['🚨','Loss 3+ mfululizo → Simama!']].map(([i,r])=>`<div class="rule-row"><span>${i}</span><span>${r}</span></div>`).join('')}
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px">🛡️ NJEM System Rules</div>
+      ${[['✅','Max mechi 6 kwa accumulator'],['✅','Double Chance ni market bora'],['✅','Kelly Criterion kwa staking'],['✅','Cashout @ 70% ya lengo'],['🚨',`Loss ${LOSS_STREAK_LIMIT}+ mfululizo → Simama!`],['🤖','AI inakuonya kabla ya kuweka']].map(([i,r])=>`<div style="display:flex;gap:8px;font-size:12px;color:#5a9e70;margin-bottom:6px"><span>${i}</span><span>${r}</span></div>`).join('')}
     </div>
-
-    <!-- Recent -->
-    ${mikeka.slice(0,3).map(m=>mkekaCardHTML(m,true)).join('')}
-  `;
+    ${mikeka.slice(0,3).map(m=>mkCard(m,true)).join('')}`;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// MIKEKA TAB
-// ═══════════════════════════════════════════════════════════════
-let mikekaFilter = 'ALL';
-let mikekaSearch = '';
+// FEED
+function renderFeed(c){
+  c.innerHTML=`
+    <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:.5rem">📡 Public Feed</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:1rem">Mikeka yote — kila mtu anaona, bankroll ya owner inalindwa</div>
+    ${allMikeka.length===0?'<div class="empty"><div style="font-size:44px">📡</div><div style="margin-top:8px">Hakuna mikeka bado</div></div>':
+    allMikeka.map(m=>`
+      <div class="card" style="margin-bottom:.75rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div>
+            <div style="font-size:13px;font-weight:700">${m.name||'Mkeka'}</div>
+            <div style="font-size:10px;color:var(--muted)">👤 ${m.users?.name||'Unknown'} · ${m.date}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="background:${sc(m.status)}22;color:${sc(m.status)};padding:.15rem .55rem;border-radius:20px;font-size:10px;font-weight:700">${m.status}</div>
+            <div style="font-size:12px;color:var(--accent);font-weight:600;margin-top:3px">${(m.total_odds||1).toFixed(2)}x</div>
+          </div>
+        </div>
+        ${(m.matches||[]).map(match=>`
+          <div style="display:flex;justify-content:space-between;padding:.4rem 0;border-top:1px solid #0d1f14;font-size:12px">
+            <span>${lgFlag(match.league)} ${match.teams}</span>
+            <span style="color:var(--muted)">${match.market} · <strong style="color:var(--accent)">${match.odds}x</strong></span>
+          </div>`).join('')}
+        <div style="margin-top:.6rem;display:flex;justify-content:space-between;font-size:12px;color:var(--muted)">
+          <span>Stake: TZS ${fmt(m.stake)}</span>
+          <span style="color:var(--accent);font-weight:600">Return: TZS ${fmt(m.potential_return||0)}</span>
+        </div>
+      </div>`).join('')}`;
+}
 
-function renderMikeka(c) {
-  const SC={WON:'var(--win)',LOST:'var(--loss)',PENDING:'var(--warn)',VOID:'#888'};
-  const shown = mikeka
-    .filter(m=>mikekaFilter==='ALL'||m.status===mikekaFilter)
-    .filter(m=>!mikekaSearch||m.name?.toLowerCase().includes(mikekaSearch)||m.matches?.some(x=>x.teams?.toLowerCase().includes(mikekaSearch)));
-
-  c.innerHTML = `
-    <input class="inp" id="mk-search" placeholder="🔍 Tafuta mkeka au timu..." value="${mikekaSearch}" style="margin-bottom:.75rem"/>
-    <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; margin-bottom:.75rem">
-      ${['ALL','PENDING','WON','LOST','VOID'].map(f=>`
-        <button class="btn-outline ${mikekaFilter===f?'active':''}" onclick="window._mkFilter('${f}')"
-          style="${mikekaFilter===f?`border-color:${SC[f]||'var(--accent)'}; background:${(SC[f]||'var(--accent)')+'22'}; color:${SC[f]||'var(--accent)'}`:''}"
-        >${f} <span style="opacity:.6">${mikeka.filter(m=>f==='ALL'||m.status===f).length}</span></button>
-      `).join('')}
+// MIKEKA
+let mkF='ALL',mkQ='';
+function renderMikeka(c){
+  const shown=mikeka.filter(m=>mkF==='ALL'||m.status===mkF).filter(m=>!mkQ||m.name?.toLowerCase().includes(mkQ)||m.matches?.some(x=>x.teams?.toLowerCase().includes(mkQ)));
+  c.innerHTML=`
+    <input class="inp" id="mk-q" placeholder="🔍 Tafuta mkeka au timu..." value="${mkQ}" style="margin-bottom:.75rem"/>
+    <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:.75rem">
+      ${['ALL','PENDING','WON','LOST','VOID'].map(f=>`<button class="btn-outline ${mkF===f?'active':''}" onclick="window._mkF('${f}')" style="${mkF===f?`border-color:${sc(f)};background:${sc(f)}22;color:${sc(f)}`:''}">
+        ${f} <span style="opacity:.6">${mikeka.filter(m=>f==='ALL'||m.status===f).length}</span></button>`).join('')}
     </div>
-    ${shown.length===0
-      ?`<div class="empty"><div class="empty-icon">📋</div><div style="margin-top:8px">Hakuna mikeka</div></div>`
-      :shown.map(m=>mkekaCardHTML(m,false)).join('')
-    }
-  `;
-
-  el('mk-search').oninput = (e) => { mikekaSearch=e.target.value.toLowerCase(); renderMikeka(c); };
-  window._mkFilter = (f) => { mikekaFilter=f; renderMikeka(c); };
-
-  // Attach expand toggles
-  c.querySelectorAll('[data-expand]').forEach(btn => {
-    btn.onclick = () => {
-      const id = btn.dataset.expand;
-      const detail = el('detail-'+id);
-      if (detail) detail.style.display = detail.style.display==='none'?'block':'none';
-    };
+    ${shown.length===0?'<div class="empty"><div style="font-size:44px">📋</div><div style="margin-top:8px">Hakuna mikeka</div></div>':shown.map(m=>mkCard(m,false)).join('')}`;
+  el('mk-q').oninput=(e)=>{mkQ=e.target.value.toLowerCase();renderMikeka(c);};
+  window._mkF=(f)=>{mkF=f;renderMikeka(c);};
+  c.querySelectorAll('[data-exp]').forEach(btn=>{
+    btn.onclick=()=>{const d=el('det-'+btn.dataset.exp);if(d)d.style.display=d.style.display==='none'?'block':'none';};
   });
 }
 
-function mkekaCardHTML(m, mini) {
-  const SC={WON:'var(--win)',LOST:'var(--loss)',PENDING:'var(--warn)',VOID:'#888'};
-  const sc = SC[m.status]||'#888';
-  const matches = m.matches||[];
-  return `
-    <div style="background:var(--surface); border:1px solid var(--border); border-radius:16px; margin-bottom:.6rem; overflow:hidden">
-      <div data-expand="${m.id}" style="padding:.85rem; cursor:${mini?'default':'pointer'}; display:flex; justify-content:space-between; align-items:center">
-        <div style="flex:1">
-          <div style="font-weight:600; font-size:13px">${m.name||'Mkeka #'+m.id.slice(-4)}</div>
-          <div style="font-size:11px; color:var(--muted); margin-top:2px">${m.date} · ${matches.length} mechi · TZS ${fmt(m.stake)}</div>
-        </div>
-        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px">
-          <div style="background:${sc}22; color:${sc}; padding:.15rem .55rem; border-radius:20px; font-size:10px; font-weight:700">${m.status}</div>
-          <div style="font-size:12px; color:var(--accent); font-weight:600">${(m.total_odds||1).toFixed(2)}x</div>
-        </div>
+function mkCard(m,mini){
+  const matches=m.matches||[];
+  return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-bottom:.6rem;overflow:hidden">
+    <div data-exp="${m.id}" style="padding:.85rem;cursor:${mini?'default':'pointer'};display:flex;justify-content:space-between;align-items:center">
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:13px">${m.name||'Mkeka #'+m.id.slice(-4)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${m.date} · ${matches.length} mechi · TZS ${fmt(m.stake)}</div>
       </div>
-      ${!mini ? `
-      <div id="detail-${m.id}" style="display:none; border-top:1px solid var(--border); padding:.75rem">
-        ${matches.map((match,i)=>{
-          const mc=SC[match.outcome]||'#888';
-          return `
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:.45rem 0; ${i<matches.length-1?'border-bottom:1px solid #0d1f14':''}">
-              <div>
-                <div style="font-size:12px; font-weight:600">${match.teams}</div>
-                <div style="font-size:10px; color:var(--muted)">${LEAGUES.find(l=>l.id===match.league)?.name||match.league} · ${match.market} · ${match.pick}</div>
-              </div>
-              <div style="text-align:right">
-                <div style="font-size:12px">${match.odds}x</div>
-                <div style="font-size:10px; font-weight:700; color:${mc}; background:${mc}22; padding:.1rem .4rem; border-radius:6px">${match.outcome||'PENDING'}</div>
-              </div>
-            </div>`;
-        }).join('')}
-        <div style="margin-top:.75rem; padding:.6rem; background:rgba(0,0,0,.3); border-radius:10px; display:flex; justify-content:space-between; font-size:13px">
-          <span style="color:var(--muted)">Potential Return:</span>
-          <span style="color:var(--accent); font-weight:700">TZS ${fmt(m.potential_return||0)}</span>
-        </div>
-        ${m.analysis?`<div style="margin-top:8px; font-size:11px; color:var(--muted); font-style:italic">📝 ${m.analysis}</div>`:''}
-      </div>` : ''}
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        <div style="background:${sc(m.status)}22;color:${sc(m.status)};padding:.15rem .55rem;border-radius:20px;font-size:10px;font-weight:700">${m.status}</div>
+        <div style="font-size:12px;color:var(--accent);font-weight:600">${(m.total_odds||1).toFixed(2)}x</div>
+      </div>
     </div>
-  `;
+    ${!mini?`<div id="det-${m.id}" style="display:none;border-top:1px solid var(--border);padding:.75rem">
+      ${matches.map((match,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:.45rem 0;${i<matches.length-1?'border-bottom:1px solid #0d1f14':''}">
+        <div><div style="font-size:12px;font-weight:600">${lgFlag(match.league)} ${match.teams}</div><div style="font-size:10px;color:var(--muted)">${lgName(match.league)} · ${match.market} · ${match.pick}</div></div>
+        <div style="text-align:right"><div style="font-size:12px">${match.odds}x</div><div style="font-size:10px;font-weight:700;color:${sc(match.outcome)};background:${sc(match.outcome)}22;padding:.1rem .4rem;border-radius:6px">${match.outcome||'PENDING'}</div></div>
+      </div>`).join('')}
+      <div style="margin-top:.75rem;padding:.6rem;background:rgba(0,0,0,.3);border-radius:10px;display:flex;justify-content:space-between;font-size:13px">
+        <span style="color:var(--muted)">Potential Return:</span><span style="color:var(--accent);font-weight:700">TZS ${fmt(m.potential_return||0)}</span>
+      </div>
+      ${m.analysis?`<div style="margin-top:8px;font-size:11px;color:var(--muted);font-style:italic">📝 ${m.analysis}</div>`:''}
+    </div>`:''}
+  </div>`;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// POST TAB
-// ═══════════════════════════════════════════════════════════════
-let postMatches  = [];
-let postChecks   = [false,false,false,false];
-let kellyOn      = false;
-let kellyProb    = 55;
-
-function renderPost(c) {
-  if (!postMatches.length) postMatches = [newMatch()];
-  const totalOdds  = postMatches.reduce((p,m)=>p*(parseFloat(m.odds)||1),1);
-  const stake      = parseInt(el('post-stake')?.value||currentUser.stake||5000);
-  const potReturn  = Math.round(totalOdds*stake);
-  const kFrac      = kelly(totalOdds, kellyProb/100);
-  const kStake     = Math.round((currentUser.bankroll*kFrac)/1000)*1000;
-  const allChecked = postChecks.every(Boolean);
-  const checkLabels= ['Nimefanya research ya kutosha kwa kila mechi','Odds hizi zina value — sio kuchagua nasibu','Siko kwenye loss streak kubwa (zaidi ya 2)','Mechi zote ni kutoka leagues zilizoidhinishwa'];
-
-  c.innerHTML = `
-    <div class="section-title">➕ Mkeka Mpya</div>
-
-    <!-- Checklist -->
-    <div style="background:${allChecked?'#0f3520':'#1f1a00'}; border:1px solid ${allChecked?'rgba(0,255,133,.3)':'rgba(255,170,0,.3)'}; border-radius:14px; padding:1rem; margin-bottom:.9rem">
-      <div style="font-size:12px; font-weight:700; color:${allChecked?'var(--win)':'var(--warn)'}; margin-bottom:10px">
-        ${allChecked?'✅ Checklist Imekamilika — Uko Ready!':'⚠️ Pre-Bet Checklist (Lazima Ukamilishe)'}
-      </div>
-      ${checkLabels.map((label,i)=>`
-        <div class="check-row" onclick="window._check(${i})">
-          <div class="check-box ${postChecks[i]?'checked':''}">${postChecks[i]?'✓':''}</div>
-          <div style="font-size:11px; color:${postChecks[i]?'#5a9e70':'var(--muted)'}">${label}</div>
-        </div>
-      `).join('')}
+// POST
+let pMatches=[],pChecks=[false,false,false,false],kOn=false,kProb=55;
+function renderPost(c){
+  if(!pMatches.length)pMatches=[newM()];
+  const tOdds=pMatches.reduce((p,m)=>p*(parseFloat(m.odds)||1),1);
+  const stake=parseInt(el('post-stake')?.value||currentUser.stake||5000);
+  const potRet=Math.round(tOdds*stake);
+  const kF=kelly(tOdds,kProb/100),kStake=Math.round(currentUser.bankroll*kF/1000)*1000;
+  const allOk=pChecks.every(Boolean),risk=analyzeRisk(pMatches);
+  const regions=[...new Set(LEAGUES.map(l=>l.region))];
+  c.innerHTML=`
+    <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:1rem">➕ Mkeka Mpya</div>
+    <div class="ocr-zone" id="ocr-zone" onclick="el('ocr-in').click()">
+      <div style="font-size:28px;margin-bottom:8px">📸</div>
+      <div style="font-size:13px;font-weight:600;color:var(--accent)">Piga Picha ya Betslip</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Gemini AI itasoma mechi zote automatically</div>
+      ${!GEMINI_KEY?'<div style="font-size:10px;color:var(--warn);margin-top:6px">⚠️ Weka Gemini key kwenye Admin → Settings</div>':'<div style="font-size:10px;color:var(--win);margin-top:6px">✅ Gemini iko tayari</div>'}
     </div>
-
-    <!-- Name & Date & Stake -->
+    <input type="file" id="ocr-in" accept="image/*" style="display:none"/>
+    <div style="background:${allOk?'#0f3520':'#1f1a00'};border:1px solid ${allOk?'rgba(0,255,133,.3)':'rgba(255,170,0,.3)'};border-radius:14px;padding:1rem;margin-bottom:.9rem">
+      <div style="font-size:12px;font-weight:700;color:${allOk?'var(--win)':'var(--warn)'};margin-bottom:10px">${allOk?'✅ Checklist Imekamilika!':'⚠️ Pre-Bet Checklist'}</div>
+      ${['Nimefanya research ya kutosha','Odds hizi zina value','Siko kwenye loss streak kubwa','Mechi zote ni kutoka leagues ninazojua'].map((l,i)=>`
+        <div onclick="window._chk(${i})" style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer">
+          <div style="width:18px;height:18px;border-radius:5px;border:2px solid ${pChecks[i]?'var(--win)':'var(--muted)'};background:${pChecks[i]?'rgba(0,255,133,.2)':'transparent'};flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--win)">${pChecks[i]?'✓':''}</div>
+          <div style="font-size:11px;color:${pChecks[i]?'#5a9e70':'var(--muted)'}">${l}</div>
+        </div>`).join('')}
+    </div>
+    ${risk.flags.length>0||risk.tips.length>0?`<div class="card" style="margin-bottom:.9rem">
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:10px">🤖 AI Risk Analysis</div>
+      ${risk.flags.map(f=>`<div class="red-flag"><span>${f.icon}</span><span style="font-size:12px;color:var(--danger)">${f.msg}</span></div>`).join('')}
+      ${risk.tips.map(t=>`<div class="green-tip"><span>${t.icon}</span><span style="font-size:12px;color:var(--win)">${t.msg}</span></div>`).join('')}
+    </div>`:''}
     <input class="inp" id="post-name" placeholder="Jina la mkeka (optional)" style="margin-bottom:10px"/>
     <div class="grid-2" style="margin-bottom:10px">
-      <div><div class="label">Tarehe</div><input type="date" class="inp-sm" id="post-date" value="${today()}"/></div>
-      <div><div class="label">Stake (TZS)</div><input type="number" class="inp-sm" id="post-stake" value="${currentUser.stake||5000}"/></div>
+      <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">Tarehe</div><input type="date" class="inp-sm" id="post-date" value="${today()}"/></div>
+      <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">Stake (TZS)</div><input type="number" class="inp-sm" id="post-stake" value="${currentUser.stake||5000}"/></div>
     </div>
-
-    <!-- Kelly -->
     <div class="card" style="margin-bottom:.9rem">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:${kellyOn?'12px':'0'}">
-        <div style="font-size:12px; font-weight:700; color:var(--accent)">🧮 Kelly Criterion</div>
-        <button class="btn-outline ${kellyOn?'active':''}" onclick="window._toggleKelly()">${kellyOn?'Ficha':'Tumia'}</button>
+      <div style="display:flex;justify-content:space-between;align-items:center${kOn?';margin-bottom:12px':''}">
+        <div style="font-size:12px;font-weight:700;color:var(--accent)">🧮 Kelly Criterion</div>
+        <button class="btn-outline ${kOn?'active':''}" onclick="window._kTog()">${kOn?'Ficha':'Tumia'}</button>
       </div>
-      ${kellyOn?`
-        <div style="font-size:11px; color:var(--muted); margin-bottom:8px">Uwezekano wako wa kushinda (%)</div>
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px">
-          <input type="range" min="30" max="80" value="${kellyProb}" id="kelly-range" style="flex:1; accent-color:var(--accent)" oninput="window._kellySlide(this.value)"/>
-          <span style="font-size:14px; font-weight:700; color:var(--accent); min-width:38px" id="kelly-pct">${kellyProb}%</span>
-        </div>
-        <div class="grid-2" style="margin-bottom:10px">
-          <div style="background:rgba(0,0,0,.3); padding:.6rem; border-radius:8px">
-            <div style="font-size:10px; color:var(--muted)">Kelly %</div>
-            <div style="font-weight:700; color:var(--accent); font-size:13px">${(kFrac*100).toFixed(1)}%</div>
-          </div>
-          <div style="background:rgba(0,0,0,.3); padding:.6rem; border-radius:8px">
-            <div style="font-size:10px; color:var(--muted)">Stake Bora</div>
-            <div style="font-weight:700; color:var(--accent); font-size:13px">TZS ${fmt(kStake)}</div>
-          </div>
-        </div>
-        <button class="btn-ghost" onclick="window._applyKelly(${kStake})">↑ Tumia TZS ${fmt(kStake)}</button>
-      `:''}
+      ${kOn?`<input type="range" min="30" max="80" value="${kProb}" oninput="window._kSlide(this.value)" style="width:100%;accent-color:var(--accent);margin-bottom:8px"/>
+      <div class="grid-2" style="margin-bottom:8px">
+        <div style="background:rgba(0,0,0,.3);padding:.6rem;border-radius:8px;text-align:center"><div style="font-size:10px;color:var(--muted)">Win Prob</div><div style="font-weight:700;color:var(--accent)" id="k-pct">${kProb}%</div></div>
+        <div style="background:rgba(0,0,0,.3);padding:.6rem;border-radius:8px;text-align:center"><div style="font-size:10px;color:var(--muted)">Stake Bora</div><div style="font-weight:700;color:var(--accent)">TZS ${fmt(kStake)}</div></div>
+      </div>
+      <button class="btn-ghost" onclick="window._kApply(${kStake})">↑ Tumia TZS ${fmt(kStake)}</button>`:''}
     </div>
-
-    <!-- Matches -->
-    <div style="font-size:13px; font-weight:700; margin-bottom:8px">Mechi (${postMatches.length}/4)</div>
-    <div id="matches-container">
-      ${postMatches.map((m,i)=>matchFormHTML(m,i)).join('')}
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">Mechi (${pMatches.length}/${MAX_MATCHES})</div>
+    <div id="matches-con">${pMatches.map((m,i)=>mHTML(m,i,regions)).join('')}</div>
+    <button onclick="window._addM()" style="width:100%;padding:.65rem;border-radius:10px;border:1.5px dashed var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;margin-bottom:.9rem">+ Ongeza Mechi</button>
+    <textarea class="inp-sm" id="post-ana" placeholder="Analysis yako — mbona umichagua mikeka hii?" rows="3" style="margin-bottom:.9rem"></textarea>
+    <div style="background:linear-gradient(135deg,#0f3520,#092518);border:1px solid rgba(0,255,133,.2);border-radius:14px;padding:1rem;margin-bottom:.9rem">
+      ${[['Total Odds',tOdds.toFixed(2)+'x','var(--text)'],['Stake','TZS '+fmt(stake),'var(--text)'],['Potential Return','TZS '+fmt(potRet),'var(--win)'],['Faida','TZS '+fmt(potRet-stake),(potRet-stake)>=0?'var(--win)':'var(--loss)']].map(([l,v,col])=>`
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px"><span style="color:var(--muted)">${l}</span><span style="font-weight:700;color:${col}">${v}</span></div>`).join('')}
     </div>
-    <button onclick="window._addMatch()" style="width:100%; padding:.65rem; border-radius:10px; border:1.5px dashed var(--border); background:transparent; color:var(--muted); cursor:pointer; font-size:12px; margin-bottom:.9rem">+ Ongeza Mechi</button>
+    <button class="btn-primary" id="post-btn" onclick="window._post()">📤 Post Mkeka</button>`;
 
-    <!-- Analysis -->
-    <textarea class="inp-sm" id="post-analysis" placeholder="Analysis yako — mbona umichagua mikeka hii?" rows="3" style="margin-bottom:.9rem"></textarea>
+  wireInps();
 
-    <!-- Summary -->
-    <div style="background:linear-gradient(135deg,#0f3520,#092518); border:1px solid rgba(0,255,133,.2); border-radius:14px; padding:1rem; margin-bottom:.9rem">
-      ${[['Total Odds',totalOdds.toFixed(2)+'x','var(--text)'],['Stake','TZS '+fmt(stake),'var(--text)'],['Potential Return','TZS '+fmt(potReturn),'var(--win)'],['Faida','TZS '+fmt(potReturn-stake),(potReturn-stake)>=0?'var(--win)':'var(--loss)']].map(([l,v,color])=>`
-        <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px">
-          <span style="color:var(--muted)">${l}</span>
-          <span style="font-weight:700; color:${color}">${v}</span>
-        </div>
-      `).join('')}
-    </div>
-
-    <button class="btn-primary" id="post-btn" onclick="window._postMkeka()">📤 Post Mkeka</button>
-  `;
-
-  // Wire match inputs
-  wireMatchInputs();
-
-  window._check = (i) => { postChecks[i]=!postChecks[i]; renderPost(c); };
-  window._toggleKelly = () => { kellyOn=!kellyOn; renderPost(c); };
-  window._kellySlide = (v) => { kellyProb=parseInt(v); if(el('kelly-pct')) el('kelly-pct').textContent=v+'%'; };
-  window._applyKelly = (s) => { if(el('post-stake')) el('post-stake').value=s; renderPost(c); };
-  window._addMatch   = () => { if(postMatches.length>=4){toast('Max mechi 4! (NJEM Rule)','err');return;} postMatches.push(newMatch()); renderPost(c); };
-  window._delMatch   = (id) => { if(postMatches.length>1){postMatches=postMatches.filter(m=>m._id!==id); renderPost(c);} };
-
-  window._postMkeka = async () => {
-    if (!postChecks.every(Boolean)) return toast('Kamilisha checklist kwanza!','warn');
-    readMatchInputs();
-    if (!postMatches.every(m=>m.teams&&m.pick&&m.odds)) return toast('Jaza mechi zote vizuri!','err');
-    const banned=postMatches.find(m=>{const l=LEAGUES.find(lg=>lg.id===m.league);return l&&!l.ok;});
-    if (banned){const l=LEAGUES.find(lg=>lg.id===banned.league);return toast(`⛔ ${l.name} ni BANNED!`,'err');}
+  el('ocr-in').onchange=async(e)=>{
+    const file=e.target.files[0];if(!file)return;
+    const zone=el('ocr-zone');zone.innerHTML='<div style="animation:pulse 1s infinite;color:var(--accent);font-size:13px;padding:1rem">🤖 Gemini inasoma picha...</div>';
+    const reader=new FileReader();
+    reader.onload=async(ev)=>{
+      const b64=ev.target.result.split(',')[1];
+      const extracted=await ocrImage(b64,file.type);
+      if(extracted.length>0){
+        pMatches=extracted.slice(0,MAX_MATCHES).map(m=>({...newM(),teams:m.teams||'',market:m.market||'1X2',odds:m.odds||'',pick:m.pick||''}));
+        toast(`✅ Mechi ${extracted.length} zimepatikana!`);renderPost(c);
+      }else{zone.innerHTML='<div style="color:var(--warn);font-size:13px;padding:1rem">⚠️ Jaza manually</div>';}
+    };reader.readAsDataURL(file);
+  };
+  window._chk=(i)=>{pChecks[i]=!pChecks[i];renderPost(c);};
+  window._kTog=()=>{kOn=!kOn;renderPost(c);};
+  window._kSlide=(v)=>{kProb=parseInt(v);const p=el('k-pct');if(p)p.textContent=v+'%';};
+  window._kApply=(s)=>{const i=el('post-stake');if(i)i.value=s;renderPost(c);};
+  window._addM=()=>{if(pMatches.length>=MAX_MATCHES)return toast(`Max mechi ${MAX_MATCHES}!`,'err');pMatches.push(newM());renderPost(c);};
+  window._delM=(id)=>{if(pMatches.length>1){pMatches=pMatches.filter(m=>m._id!==id);renderPost(c);}};
+  window._post=async()=>{
+    if(!pChecks.every(Boolean))return toast('Kamilisha checklist kwanza!','warn');
+    readInps();
+    if(!pMatches.every(m=>m.teams&&m.odds))return toast('Jaza mechi zote vizuri!','err');
     const streak=getStreak();
-    if(streak.type==='LOSS'&&streak.count>=3) return toast('🚨 Loss streak 3! NJEM inakuzuia. Pumzika!','err');
-
-    const name      = el('post-name')?.value||`Mkeka ${mikeka.length+1}`;
-    const date      = el('post-date')?.value||today();
-    const stake     = parseInt(el('post-stake')?.value||5000);
-    const analysis  = el('post-analysis')?.value||'';
-    const totalOdds = postMatches.reduce((p,m)=>p*(parseFloat(m.odds)||1),1);
-    const potReturn = Math.round(totalOdds*stake);
-    const mkekaId   = uid();
-
-    const btn = el('post-btn');
-    btn.textContent='Inasave...'; btn.disabled=true;
-
-    const{error:e1}=await sb.from('mikeka').insert({
-      id:mkekaId, user_id:currentUser.id, name, date, stake,
-      total_odds:totalOdds, potential_return:potReturn, analysis, status:'PENDING'
-    });
-    if(e1){btn.textContent='📤 Post Mkeka'; btn.disabled=false; return toast('Hitilafu: '+e1.message,'err');}
-
-    const{error:e2}=await sb.from('matches').insert(
-      postMatches.map(m=>({id:uid(),mkeka_id:mkekaId,teams:m.teams,league:m.league,market:m.market,pick:m.pick,odds:parseFloat(m.odds),outcome:'PENDING'}))
-    );
-    btn.textContent='📤 Post Mkeka'; btn.disabled=false;
-    if(e2) return toast('Hitilafu ya mechi: '+e2.message,'err');
-
+    if(streak.type==='LOSS'&&streak.count>=LOSS_STREAK_LIMIT)return toast('🚨 Loss streak! Pumzika kwanza!','err');
+    const name=el('post-name')?.value||`Mkeka ${mikeka.length+1}`;
+    const date=el('post-date')?.value||today();
+    const stake=parseInt(el('post-stake')?.value||5000);
+    const ana=el('post-ana')?.value||'';
+    const tOdds=pMatches.reduce((p,m)=>p*(parseFloat(m.odds)||1),1);
+    const potRet=Math.round(tOdds*stake);
+    const mId=uid();
+    const btn=el('post-btn');btn.textContent='Inasave...';btn.disabled=true;
+    const{error:e1}=await sb.from('mikeka').insert({id:mId,user_id:currentUser.id,name,date,stake,total_odds:tOdds,potential_return:potRet,analysis:ana,status:'PENDING'});
+    if(e1){btn.textContent='📤 Post Mkeka';btn.disabled=false;return toast('Hitilafu: '+e1.message,'err');}
+    const{error:e2}=await sb.from('matches').insert(pMatches.map(m=>({id:uid(),mkeka_id:mId,teams:m.teams,league:m.league,market:m.market,pick:m.pick,odds:parseFloat(m.odds),outcome:'PENDING'})));
+    btn.textContent='📤 Post Mkeka';btn.disabled=false;
+    if(e2)return toast('Hitilafu ya mechi: '+e2.message,'err');
     toast('Mkeka umewekwa! 🎯');
-    postMatches=[newMatch()]; postChecks=[false,false,false,false];
-    await loadMikeka();
-    showTab('mikeka');
+    pMatches=[newM()];pChecks=[false,false,false,false];
+    await loadData();showTab('mikeka');
   };
 }
-
-function newMatch() { return {_id:uid(),teams:'',league:'epl',market:'Double Chance',pick:'',odds:''}; }
-
-function matchFormHTML(m, idx) {
-  return `
-    <div class="card" style="margin-bottom:.6rem">
-      <div style="display:flex; justify-content:space-between; margin-bottom:8px">
-        <div style="font-size:11px; font-weight:700; color:var(--accent)">Mechi ${idx+1}</div>
-        ${idx>0?`<button onclick="window._delMatch('${m._id}')" style="background:none; border:none; color:var(--loss); cursor:pointer; font-size:18px; padding:0">×</button>`:''}
-      </div>
-      <input class="inp-sm" data-mid="${m._id}" data-field="teams" placeholder="Timu A vs Timu B" value="${m.teams}" style="margin-bottom:6px"/>
-      <div class="grid-2" style="margin-bottom:6px">
-        <select class="inp-sm" data-mid="${m._id}" data-field="league">
-          ${LEAGUES.map(l=>`<option value="${l.id}" ${m.league===l.id?'selected':''} ${!l.ok?'disabled':''}>
-            ${!l.ok?'⛔ ':''}${l.flag} ${l.name}
-          </option>`).join('')}
-        </select>
-        <select class="inp-sm" data-mid="${m._id}" data-field="market">
-          ${MARKETS.map(mk=>`<option value="${mk}" ${m.market===mk?'selected':''}>${mk}</option>`).join('')}
-        </select>
-      </div>
-      <div class="grid-2">
-        <input class="inp-sm" data-mid="${m._id}" data-field="pick" placeholder="Pick (1X, Over 2.5...)" value="${m.pick}"/>
-        <input class="inp-sm" data-mid="${m._id}" data-field="odds" placeholder="Odds (1.75)" type="number" step="0.01" min="1" value="${m.odds}"/>
-      </div>
+function newM(){return{_id:uid(),teams:'',league:'epl',market:'Double Chance',pick:'',odds:''};}
+function mHTML(m,idx,regions){
+  return`<div class="card" style="margin-bottom:.6rem">
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--accent)">Mechi ${idx+1}</div>
+      ${idx>0?`<button onclick="window._delM('${m._id}')" style="background:none;border:none;color:var(--loss);cursor:pointer;font-size:18px;padding:0">×</button>`:''}
     </div>
-  `;
+    <input class="inp-sm" data-mid="${m._id}" data-f="teams" placeholder="Timu A vs Timu B" value="${m.teams}" style="margin-bottom:6px"/>
+    <div class="grid-2" style="margin-bottom:6px">
+      <select class="inp-sm" data-mid="${m._id}" data-f="league">
+        ${regions.map(r=>`<optgroup label="${r}">${LEAGUES.filter(l=>l.region===r).map(l=>`<option value="${l.id}" ${m.league===l.id?'selected':''}>${l.flag} ${l.name}</option>`).join('')}</optgroup>`).join('')}
+      </select>
+      <select class="inp-sm" data-mid="${m._id}" data-f="market">
+        ${MARKETS.map(mk=>`<option value="${mk}" ${m.market===mk?'selected':''}>${mk}</option>`).join('')}
+      </select>
+    </div>
+    <div class="grid-2">
+      <input class="inp-sm" data-mid="${m._id}" data-f="pick" placeholder="Pick (1X, Over 2.5...)" value="${m.pick}"/>
+      <input class="inp-sm" data-mid="${m._id}" data-f="odds" placeholder="Odds (1.75)" type="number" step="0.01" min="1" value="${m.odds}"/>
+    </div>
+  </div>`;
 }
-
-function wireMatchInputs() {
-  document.querySelectorAll('[data-mid]').forEach(inp => {
-    inp.onchange = (e) => {
-      const mid   = e.target.dataset.mid;
-      const field = e.target.dataset.field;
-      const val   = e.target.value;
-      if (field==='league') {
-        const l=LEAGUES.find(lg=>lg.id===val);
-        if(l&&!l.ok){toast(`⛔ ${l.name} ni BANNED!`,'err'); e.target.value=postMatches.find(m=>m._id===mid)?.league||'epl'; return;}
-      }
-      postMatches = postMatches.map(m=>m._id===mid?{...m,[field]:val}:m);
-    };
+function wireInps(){
+  document.querySelectorAll('[data-mid]').forEach(inp=>{
+    inp.onchange=(e)=>{const mid=e.target.dataset.mid,f=e.target.dataset.f,v=e.target.value;pMatches=pMatches.map(m=>m._id===mid?{...m,[f]:v}:m);};
+  });
+}
+function readInps(){
+  document.querySelectorAll('[data-mid]').forEach(inp=>{
+    const mid=inp.dataset.mid,f=inp.dataset.f;pMatches=pMatches.map(m=>m._id===mid?{...m,[f]:inp.value}:m);
   });
 }
 
-function readMatchInputs() {
-  document.querySelectorAll('[data-mid]').forEach(inp => {
-    const mid=inp.dataset.mid, field=inp.dataset.field;
-    postMatches=postMatches.map(m=>m._id===mid?{...m,[field]:inp.value}:m);
-  });
-}
-
-// ═══════════════════════════════════════════════════════════════
-// RESULTS TAB
-// ═══════════════════════════════════════════════════════════════
-function renderResults(c) {
-  const pending = mikeka.filter(m=>m.status==='PENDING');
-  const SC={WIN:'var(--win)',LOSS:'var(--loss)',VOID:'#888'};
-
-  if (!pending.length) {
-    c.innerHTML=`<div class="section-title">✅ Rekodi Matokeo</div><div class="empty"><div class="empty-icon">✅</div><div style="margin-top:8px">Hakuna mikeka inayosubiri matokeo</div></div>`;
-    return;
-  }
-
-  c.innerHTML = `
-    <div class="section-title">✅ Rekodi Matokeo</div>
-    ${pending.map(m=>`
-      <div class="card" style="padding:0; overflow:hidden; margin-bottom:.75rem">
-        <div style="padding:.85rem; border-bottom:1px solid var(--border)">
-          <div style="font-weight:700">${m.name||'Mkeka #'+m.id.slice(-4)}</div>
-          <div style="font-size:11px; color:var(--muted)">${m.date} · ${(m.total_odds||1).toFixed(2)}x · TZS ${fmt(m.potential_return||0)}</div>
-        </div>
-        ${(m.matches||[]).map((match,i)=>`
-          <div style="padding:.75rem; border-bottom:${i<(m.matches.length-1)?'1px solid #0d1f14':'none'}">
-            <div style="font-size:12px; font-weight:600; margin-bottom:2px">${match.teams}</div>
-            <div style="font-size:10px; color:var(--muted); margin-bottom:8px">${match.market} · ${match.pick} @ ${match.odds}</div>
-            <div style="display:flex; gap:6px">
-              ${['WIN','LOSS','VOID'].map(o=>`
-                <button onclick="window._setOutcome('${m.id}','${match.id}','${o}')"
-                  style="flex:1; padding:.4rem; border-radius:20px; border:1.5px solid ${match.outcome===o?(SC[o]):'var(--border)'}; background:${match.outcome===o?(SC[o]+'22'):'transparent'}; color:${match.outcome===o?(SC[o]):'var(--muted)'}; font-weight:700; font-size:11px; cursor:pointer">
-                  ${o}
-                </button>
-              `).join('')}
-            </div>
-          </div>
-        `).join('')}
+// RESULTS
+function renderResults(c){
+  const pending=mikeka.filter(m=>m.status==='PENDING');
+  if(!pending.length){c.innerHTML=`<div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:1rem">✅ Rekodi Matokeo</div><div class="empty"><div style="font-size:44px">✅</div><div style="margin-top:8px">Hakuna mkeka unaosubiri</div></div>`;return;}
+  c.innerHTML=`<div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:1rem">✅ Rekodi Matokeo</div>
+    ${pending.map(m=>`<div class="card" style="padding:0;overflow:hidden;margin-bottom:.75rem">
+      <div style="padding:.85rem;border-bottom:1px solid var(--border)">
+        <div style="font-weight:700">${m.name||'Mkeka'}</div>
+        <div style="font-size:11px;color:var(--muted)">${m.date} · ${(m.total_odds||1).toFixed(2)}x · TZS ${fmt(m.potential_return||0)}</div>
       </div>
-    `).join('')}
-  `;
-
-  window._setOutcome = async (mkekaId, matchId, outcome) => {
+      ${(m.matches||[]).map((match,i)=>`<div style="padding:.75rem;border-bottom:${i<m.matches.length-1?'1px solid #0d1f14':'none'}">
+        <div style="font-size:12px;font-weight:600;margin-bottom:2px">${lgFlag(match.league)} ${match.teams}</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:8px">${match.market} · ${match.pick} @ ${match.odds}x</div>
+        <div style="display:flex;gap:6px">
+          ${['WIN','LOSS','VOID'].map(o=>`<button onclick="window._out('${m.id}','${match.id}','${o}')" style="flex:1;padding:.4rem;border-radius:20px;border:1.5px solid ${match.outcome===o?sc(o):'var(--border)'};background:${match.outcome===o?sc(o)+'22':'transparent'};color:${match.outcome===o?sc(o):'var(--muted)'};font-weight:700;font-size:11px;cursor:pointer">${o}</button>`).join('')}
+        </div>
+      </div>`).join('')}
+    </div>`).join('')}`;
+  window._out=async(mId,matchId,outcome)=>{
     await sb.from('matches').update({outcome}).eq('id',matchId);
-    const{data:allMatches}=await sb.from('matches').select('*').eq('mkeka_id',mkekaId);
-    const allSettled=allMatches.every(m=>m.outcome!=='PENDING');
-    if(allSettled){
-      const hasLoss=allMatches.some(m=>m.outcome==='LOSS');
-      const allVoid=allMatches.every(m=>m.outcome==='VOID');
-      const newStatus=hasLoss?'LOST':allVoid?'VOID':'WON';
-      await sb.from('mikeka').update({status:newStatus}).eq('id',mkekaId);
-      const mk=mikeka.find(m=>m.id===mkekaId);
-      if(newStatus==='WON'&&mk){
-        const gain=(mk.potential_return||0)-(mk.stake||0);
-        await updateUser({bankroll:currentUser.bankroll+gain});
-        toast(`🎉 Umeshinda! +TZS ${fmt(gain)}`);
-      } else if(newStatus==='LOST'){
-        toast('Mkeka umepoteza. Jaribu tena! 💪','warn');
-      }
+    const{data:all}=await sb.from('matches').select('*').eq('mkeka_id',mId);
+    const allDone=all.every(m=>m.outcome!=='PENDING');
+    if(allDone){
+      const hasLoss=all.some(m=>m.outcome==='LOSS'),allVoid=all.every(m=>m.outcome==='VOID');
+      const newS=hasLoss?'LOST':allVoid?'VOID':'WON';
+      await sb.from('mikeka').update({status:newS}).eq('id',mId);
+      const mk=mikeka.find(m=>m.id===mId);
+      if(newS==='WON'&&mk){const gain=(mk.potential_return||0)-(mk.stake||0);await updateUser({bankroll:currentUser.bankroll+gain});toast(`🎉 Umeshinda! +TZS ${fmt(gain)}`);}
+      else if(newS==='LOST')toast('Mkeka umepoteza. Jaribu tena! 💪','warn');
     }
-    await loadMikeka();
-    renderResults(c);
+    await loadData();renderResults(c);
   };
 }
 
-// ═══════════════════════════════════════════════════════════════
-// REPORTS TAB
-// ═══════════════════════════════════════════════════════════════
-let reportPeriod='month', reportView='overview';
-
-function renderReports(c) {
+// REPORTS
+let rP='month',rV='overview';
+function renderReports(c){
   const now=new Date();
   const fil=mikeka.filter(m=>{
     const d=new Date(m.date);
-    if(reportPeriod==='week'){const w=new Date(now);w.setDate(now.getDate()-7);return d>=w;}
-    if(reportPeriod==='month') return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
-    if(reportPeriod==='year')  return d.getFullYear()===now.getFullYear();
+    if(rP==='week'){const w=new Date(now);w.setDate(now.getDate()-7);return d>=w;}
+    if(rP==='month')return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
+    if(rP==='year')return d.getFullYear()===now.getFullYear();
     return true;
   });
-
   const won=fil.filter(m=>m.status==='WON'),lost=fil.filter(m=>m.status==='LOST'),settled=[...won,...lost];
-  const staked=fil.reduce((s,m)=>s+(m.stake||0),0);
-  const ret=won.reduce((s,m)=>s+(m.potential_return||0),0);
-  const profit=ret-staked;
-  const roi=staked>0?((profit/staked)*100).toFixed(1):'0.0';
+  const staked=fil.reduce((s,m)=>s+(m.stake||0),0),ret=won.reduce((s,m)=>s+(m.potential_return||0),0);
+  const profit=ret-staked,roi=staked>0?((profit/staked)*100).toFixed(1):'0.0';
   const wr=settled.length>0?((won.length/settled.length)*100).toFixed(1):'0.0';
-  const avgOdds=fil.length>0?(fil.reduce((s,m)=>s+(m.total_odds||1),0)/fil.length).toFixed(2):'0.00';
-
-  // League stats
-  const lgMap={};
+  const lgMap={},mkMap={};
   fil.forEach(m=>(m.matches||[]).forEach(x=>{
-    if(!lgMap[x.league]) lgMap[x.league]={w:0,l:0,t:0};
-    lgMap[x.league].t++;
-    if(x.outcome==='WIN') lgMap[x.league].w++;
-    if(x.outcome==='LOSS') lgMap[x.league].l++;
+    if(!lgMap[x.league])lgMap[x.league]={w:0,l:0,t:0};
+    lgMap[x.league].t++;if(x.outcome==='WIN')lgMap[x.league].w++;if(x.outcome==='LOSS')lgMap[x.league].l++;
+    if(!mkMap[x.market])mkMap[x.market]={w:0,t:0};
+    mkMap[x.market].t++;if(x.outcome==='WIN')mkMap[x.market].w++;
   }));
-
-  // Market stats
-  const mkMap={};
-  fil.forEach(m=>(m.matches||[]).forEach(x=>{
-    if(!mkMap[x.market]) mkMap[x.market]={w:0,t:0};
-    mkMap[x.market].t++;
-    if(x.outcome==='WIN') mkMap[x.market].w++;
-  }));
-
-  // Daily trend
-  const dayMap={};
-  fil.forEach(m=>{
-    if(!dayMap[m.date]) dayMap[m.date]=0;
-    if(m.status==='WON') dayMap[m.date]+=(m.potential_return-m.stake);
-    if(m.status==='LOST') dayMap[m.date]-=m.stake;
-  });
-  const days=Object.entries(dayMap).sort((a,b)=>a[0].localeCompare(b[0])).slice(-14);
-  const maxAbs=Math.max(...days.map(([,v])=>Math.abs(v)),1);
-
+  const danger=Object.entries(lgMap).filter(([,s])=>s.t>=2&&(s.l/s.t)>0.6);
+  const best=Object.entries(lgMap).filter(([,s])=>s.t>=2&&(s.w/s.t)>0.6);
+  const days={};fil.forEach(m=>{if(!days[m.date])days[m.date]=0;if(m.status==='WON')days[m.date]+=(m.potential_return-m.stake);if(m.status==='LOST')days[m.date]-=m.stake;});
+  const dayArr=Object.entries(days).sort((a,b)=>a[0].localeCompare(b[0])).slice(-14);
+  const maxAbs=Math.max(...dayArr.map(([,v])=>Math.abs(v)),1);
   const grade=parseFloat(roi)>=15?'A+':parseFloat(roi)>=5?'A':parseFloat(roi)>=0?'B':parseFloat(roi)>=-10?'C':'D';
-  const gradeColor=parseFloat(roi)>=5?'var(--win)':parseFloat(roi)>=0?'var(--warn)':'var(--loss)';
-
-  c.innerHTML = `
-    <div class="section-title">📊 Ripoti za Ufanisi</div>
-
-    <!-- Period -->
-    <div style="display:flex; gap:6px; margin-bottom:.75rem">
-      ${[['week','Wiki'],['month','Mwezi'],['year','Mwaka'],['all','Yote']].map(([v,l])=>`
-        <button style="flex:1; padding:.45rem; border-radius:12px; border:1.5px solid ${reportPeriod===v?'var(--accent)':'var(--border)'}; background:${reportPeriod===v?'rgba(0,255,133,.15)':'transparent'}; color:${reportPeriod===v?'var(--accent)':'var(--muted)'}; font-weight:700; font-size:12px; cursor:pointer"
-          onclick="window._rPeriod('${v}')">${l}</button>
-      `).join('')}
+  const gColor=parseFloat(roi)>=5?'var(--win)':parseFloat(roi)>=0?'var(--warn)':'var(--loss)';
+  c.innerHTML=`
+    <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:.9rem">📊 Ripoti</div>
+    <div style="display:flex;gap:6px;margin-bottom:.75rem">
+      ${[['week','Wiki'],['month','Mwezi'],['year','Mwaka'],['all','Yote']].map(([v,l])=>`<button onclick="window._rP('${v}')" style="flex:1;padding:.45rem;border-radius:12px;border:1.5px solid ${rP===v?'var(--accent)':'var(--border)'};background:${rP===v?'rgba(0,255,133,.15)':'transparent'};color:${rP===v?'var(--accent)':'var(--muted)'};font-weight:700;font-size:12px;cursor:pointer">${l}</button>`).join('')}
     </div>
-
-    <!-- View -->
-    <div style="display:flex; gap:6px; margin-bottom:.9rem">
-      ${[['overview','Muhtasari'],['leagues','Ligi'],['markets','Markets'],['trend','Trend']].map(([v,l])=>`
-        <button style="flex:1; padding:.4rem; border-radius:10px; border:1.5px solid ${reportView===v?'var(--accent)':'var(--border)'}; background:${reportView===v?'rgba(0,255,133,.1)':'transparent'}; color:${reportView===v?'var(--accent)':'var(--muted)'}; font-weight:700; font-size:11px; cursor:pointer"
-          onclick="window._rView('${v}')">${l}</button>
-      `).join('')}
+    <div style="display:flex;gap:5px;margin-bottom:.9rem">
+      ${[['overview','Muhtasari'],['leagues','Ligi'],['markets','Markets'],['trend','Trend'],['ai','AI Tips']].map(([v,l])=>`<button onclick="window._rV('${v}')" style="flex:1;padding:.4rem;border-radius:10px;border:1.5px solid ${rV===v?'var(--accent)':'var(--border)'};background:${rV===v?'rgba(0,255,133,.1)':'transparent'};color:${rV===v?'var(--accent)':'var(--muted)'};font-weight:700;font-size:10px;cursor:pointer">${l}</button>`).join('')}
     </div>
-
-    <!-- Content -->
-    <div id="report-content"></div>
-  `;
-
-  window._rPeriod=(v)=>{reportPeriod=v;renderReports(c);};
-  window._rView  =(v)=>{reportView=v;renderReports(c);};
-
-  const rc=el('report-content');
-
-  if(reportView==='overview'){
+    <div id="rc"></div>`;
+  window._rP=(v)=>{rP=v;renderReports(c);};window._rV=(v)=>{rV=v;renderReports(c);};
+  const rc=el('rc');
+  if(rV==='overview'){
     rc.innerHTML=`
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:.75rem">
-        ${[['📋',fil.length,'Mikeka','var(--text)'],['✅',won.length,'Imeshinda','var(--win)'],['❌',lost.length,'Imepoteza','var(--loss)'],['🎯',wr+'%','Win Rate',parseFloat(wr)>=50?'var(--win)':'var(--loss)'],['💸',fmt(staked),'Staked TZS','var(--text)'],['💰',fmt(ret),'Return TZS','var(--win)'],[profit>=0?'📈':'📉',(profit>=0?'+':'')+fmt(profit),'Faida/Hasara',profit>=0?'var(--win)':'var(--loss)'],['🔄',roi+'%','ROI',parseFloat(roi)>=0?'var(--win)':'var(--loss)'],['🎲',avgOdds+'x','Avg Odds','var(--text)']].map(([ic,v,l,col])=>`
-          <div class="stat-box"><div class="stat-icon">${ic}</div><div class="stat-val" style="color:${col}">${v}</div><div class="stat-label">${l}</div></div>
-        `).join('')}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.75rem">
+        ${[['📋',fil.length,'Mikeka','var(--text)'],['✅',won.length,'Imeshinda','var(--win)'],['❌',lost.length,'Imepoteza','var(--loss)'],['🎯',wr+'%','Win Rate',parseFloat(wr)>=50?'var(--win)':'var(--loss)'],['💸',fmt(staked),'Staked','var(--text)'],['💰',fmt(ret),'Return','var(--win)'],[profit>=0?'📈':'📉',(profit>=0?'+':'')+fmt(profit),'Faida',profit>=0?'var(--win)':'var(--loss)'],['🔄',roi+'%','ROI',parseFloat(roi)>=0?'var(--win)':'var(--loss)']].map(([ic,v,l,col])=>`<div class="stat-box"><div class="stat-icon">${ic}</div><div class="stat-val" style="color:${col}">${v}</div><div class="stat-label">${l}</div></div>`).join('')}
       </div>
       <div class="card" style="margin-bottom:.75rem">
-        <div style="font-size:12px; font-weight:700; margin-bottom:10px">Win vs Loss</div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:10px">Win vs Loss</div>
         <div class="progress-bar"><div class="progress-fill" style="width:${clamp(parseFloat(wr),0,100)}%"></div></div>
-        <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:var(--muted)">
-          <span>Loss: ${lost.length}</span><span style="color:var(--win); font-weight:700">${wr}% won</span><span>Win: ${won.length}</span>
-        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--muted)"><span>Loss: ${lost.length}</span><span style="color:var(--win);font-weight:700">${wr}% won</span><span>Win: ${won.length}</span></div>
       </div>
-      <div style="background:linear-gradient(135deg,#0f3520,#092518); border:1px solid rgba(0,255,133,.2); border-radius:14px; padding:1rem; display:flex; align-items:center; gap:16px">
-        <div style="font-family:'Syne',sans-serif; font-size:52px; font-weight:800; color:${gradeColor}">${grade}</div>
-        <div>
-          <div style="font-size:12px; font-weight:700; color:var(--accent); margin-bottom:4px">🛡️ NJEM Discipline Score</div>
-          <div style="font-size:12px; color:#5a9e70">${parseFloat(roi)>=15?'🔥 Bora sana! Endelea na mfumo!':parseFloat(roi)>=0?'👍 Uko njia sahihi. Dumisha!':parseFloat(roi)>=-10?'⚠️ Pumzika. Kagua strategy yako.':'🚨 Simama kabisa. Reboot bankroll.'}</div>
+      <div style="background:linear-gradient(135deg,#0f3520,#092518);border:1px solid rgba(0,255,133,.2);border-radius:14px;padding:1rem;display:flex;align-items:center;gap:16px">
+        <div style="font-family:'Syne',sans-serif;font-size:52px;font-weight:800;color:${gColor}">${grade}</div>
+        <div><div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:4px">🛡️ NJEM Score</div>
+          <div style="font-size:12px;color:#5a9e70">${parseFloat(roi)>=15?'🔥 Bora sana!':parseFloat(roi)>=0?'👍 Uko njia sahihi!':parseFloat(roi)>=-10?'⚠️ Pumzika kidogo.':'🚨 Simama. Reboot.'}</div>
         </div>
-      </div>
-    `;
+      </div>`;
   }
-
-  if(reportView==='leagues'){
-    rc.innerHTML=Object.entries(lgMap).sort((a,b)=>b[1].w-a[1].w).map(([id,s])=>{
-      const wr2=s.t>0?((s.w/s.t)*100).toFixed(0):0;
-      const lg=LEAGUES.find(l=>l.id===id);
-      return `
-        <div class="card" style="margin-bottom:.6rem">
-          <div style="display:flex; justify-content:space-between; margin-bottom:6px">
-            <span style="font-weight:600; font-size:13px">${lg?.flag} ${lg?.name||id}</span>
-            <span style="font-weight:700; color:${parseInt(wr2)>=50?'var(--win)':'var(--loss)'}">${wr2}%</span>
-          </div>
-          <div style="background:rgba(0,0,0,.4); border-radius:10px; height:6px; overflow:hidden">
-            <div style="height:100%; width:${wr2}%; background:var(--win); border-radius:10px; transition:width .8s"></div>
-          </div>
-          <div style="font-size:10px; color:var(--muted); margin-top:4px">${s.w}W / ${s.l}L / ${s.t} mechi</div>
-        </div>
-      `;
-    }).join('')||'<div class="empty"><div class="empty-icon">📊</div><div style="margin-top:8px">Hakuna data</div></div>';
-  }
-
-  if(reportView==='markets'){
-    rc.innerHTML=Object.entries(mkMap).sort((a,b)=>b[1].w-a[1].w).map(([market,s])=>{
-      const wr2=s.t>0?((s.w/s.t)*100).toFixed(0):0;
-      return `
-        <div class="card" style="margin-bottom:.6rem">
-          <div style="display:flex; justify-content:space-between; margin-bottom:6px">
-            <span style="font-weight:600; font-size:13px">${market}</span>
-            <span style="font-weight:700; color:${parseInt(wr2)>=50?'var(--win)':'var(--loss)'}">${wr2}%</span>
-          </div>
-          <div style="background:rgba(0,0,0,.4); border-radius:10px; height:6px; overflow:hidden">
-            <div style="height:100%; width:${wr2}%; background:#4da6ff; border-radius:10px"></div>
-          </div>
-          <div style="font-size:10px; color:var(--muted); margin-top:4px">${s.w}W / ${s.t-s.w}L</div>
-        </div>
-      `;
-    }).join('')||'<div class="empty"><div class="empty-icon">📊</div><div style="margin-top:8px">Hakuna data</div></div>';
-  }
-
-  if(reportView==='trend'){
+  if(rV==='leagues'){
     rc.innerHTML=`
-      <div class="card">
-        <div style="font-size:12px; font-weight:700; color:var(--accent); margin-bottom:12px">📈 Trend ya Faida/Hasara (Siku 14)</div>
-        ${days.length===0?'<div style="text-align:center; color:var(--muted); padding:1rem">Hakuna data ya kutosha</div>':
-          days.map(([date,val])=>`
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px">
-              <div style="font-size:10px; color:var(--muted); min-width:55px">${date.slice(5)}</div>
-              <div style="flex:1; background:rgba(0,0,0,.4); border-radius:6px; height:18px; overflow:hidden; position:relative">
-                ${val!==0?`<div style="position:absolute; top:0; height:100%; width:${(Math.abs(val)/maxAbs*100).toFixed(0)}%; ${val>0?'left:0':'right:0'}; background:${val>0?'var(--win)':'var(--loss)'}; border-radius:6px"></div>`:''}
-              </div>
-              <div style="font-size:11px; font-weight:700; color:${val>=0?'var(--win)':'var(--loss)'}; min-width:75px; text-align:right">${val>=0?'+':''}${fmt(val)}</div>
-            </div>
-          `).join('')
-        }
-      </div>
-    `;
+      ${danger.length?`<div style="font-size:12px;font-weight:700;color:var(--danger);margin-bottom:8px">🚨 Leagues Zinazokuchania</div>
+        ${danger.map(([id,s])=>`<div class="card" style="border-color:rgba(255,68,68,.3);margin-bottom:.5rem"><div style="display:flex;justify-content:space-between"><span style="font-weight:600">${lgFlag(id)} ${lgName(id)}</span><span style="color:var(--loss);font-weight:700">${((s.l/s.t)*100).toFixed(0)}% Loss</span></div><div style="font-size:10px;color:var(--muted);margin-top:4px">${s.w}W/${s.l}L — ⚠️ Epuka!</div></div>`).join('')}`:''}
+      ${best.length?`<div style="font-size:12px;font-weight:700;color:var(--win);margin-bottom:8px;margin-top:8px">✅ Leagues Bora</div>
+        ${best.map(([id,s])=>`<div class="card" style="border-color:rgba(0,255,133,.3);margin-bottom:.5rem"><div style="display:flex;justify-content:space-between"><span style="font-weight:600">${lgFlag(id)} ${lgName(id)}</span><span style="color:var(--win);font-weight:700">${((s.w/s.t)*100).toFixed(0)}% Win</span></div><div style="font-size:10px;color:var(--muted);margin-top:4px">${s.w}W/${s.l}L — ✅ Endelea!</div></div>`).join('')}`:''}
+      ${Object.entries(lgMap).sort((a,b)=>b[1].w-a[1].w).map(([id,s])=>{const w=s.t?((s.w/s.t)*100).toFixed(0):0;return`<div class="card" style="margin-bottom:.5rem"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-weight:600;font-size:13px">${lgFlag(id)} ${lgName(id)}</span><span style="font-weight:700;color:${parseInt(w)>=50?'var(--win)':'var(--loss)'}">${w}%</span></div><div style="background:rgba(0,0,0,.4);border-radius:10px;height:6px;overflow:hidden"><div style="height:100%;width:${w}%;background:${parseInt(w)>=50?'var(--win)':'var(--loss)'};border-radius:10px;transition:width .8s"></div></div><div style="font-size:10px;color:var(--muted);margin-top:4px">${s.w}W/${s.l}L/${s.t} mechi</div></div>`;}).join('')||'<div class="empty"><div style="font-size:44px">📊</div><div style="margin-top:8px">Hakuna data</div></div>'}`;
+  }
+  if(rV==='markets'){
+    rc.innerHTML=Object.entries(mkMap).sort((a,b)=>(b[1].w/b[1].t)-(a[1].w/a[1].t)).map(([market,s])=>{const w=s.t?((s.w/s.t)*100).toFixed(0):0;return`<div class="card" style="margin-bottom:.5rem"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-weight:600">${market}</span><span style="font-weight:700;color:${parseInt(w)>=50?'var(--win)':'var(--loss)'}">${w}%</span></div><div style="background:rgba(0,0,0,.4);border-radius:10px;height:6px;overflow:hidden"><div style="height:100%;width:${w}%;background:var(--info);border-radius:10px"></div></div><div style="font-size:10px;color:var(--muted);margin-top:4px">${s.w}W/${s.t-s.w}L</div></div>`;}).join('')||'<div class="empty"><div style="font-size:44px">📊</div><div style="margin-top:8px">Hakuna data</div></div>';
+  }
+  if(rV==='trend'){
+    rc.innerHTML=`<div class="card"><div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:12px">📈 Trend (Siku 14)</div>
+      ${dayArr.length===0?'<div style="text-align:center;color:var(--muted);padding:1rem">Hakuna data</div>':dayArr.map(([date,val])=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="font-size:10px;color:var(--muted);min-width:50px">${date.slice(5)}</div><div style="flex:1;background:rgba(0,0,0,.4);border-radius:6px;height:18px;overflow:hidden;position:relative">${val!==0?`<div style="position:absolute;top:0;height:100%;width:${(Math.abs(val)/maxAbs*100).toFixed(0)}%;${val>0?'left:0':'right:0'};background:${val>0?'var(--win)':'var(--loss)'};border-radius:6px"></div>`:''}</div><div style="font-size:11px;font-weight:700;color:${val>=0?'var(--win)':'var(--loss)'};min-width:70px;text-align:right">${val>=0?'+':''}${fmt(val)}</div></div>`).join('')}
+    </div>`;
+  }
+  if(rV==='ai'){
+    rc.innerHTML=`
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:12px">🤖 AI Smart Recommendations</div>
+      ${danger.map(([id])=>`<div class="red-flag"><span>🚨</span><div><div style="font-size:12px;font-weight:700;color:var(--danger)">${lgFlag(id)} ${lgName(id)} — Epuka!</div><div style="font-size:11px;color:var(--muted);margin-top:2px">League hii inakuchania. AI inakushauri uepuke.</div></div></div>`).join('')}
+      ${best.map(([id])=>`<div class="green-tip"><span>⭐</span><div><div style="font-size:12px;font-weight:700;color:var(--win)">${lgFlag(id)} ${lgName(id)} — Endelea!</div><div style="font-size:11px;color:var(--muted);margin-top:2px">League hii inakupa matokeo mazuri. Weka nguvu hapa.</div></div></div>`).join('')}
+      ${Object.entries(mkMap).length?`<div class="green-tip"><span>💡</span><div><div style="font-size:12px;font-weight:700;color:var(--win)">Market Bora: ${Object.entries(mkMap).sort((a,b)=>(b[1].w/b[1].t)-(a[1].w/a[1].t))[0]?.[0]||'N/A'}</div><div style="font-size:11px;color:var(--muted)">Market hii inakupa win rate kubwa zaidi kwako.</div></div></div>`:''}
+      ${danger.length===0&&best.length===0?'<div class="empty"><div style="font-size:44px">🤖</div><div style="margin-top:8px">Weka mikeka 10+ ili AI ikupe recommendations</div></div>':''}`;
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// ADMIN TAB
-// ═══════════════════════════════════════════════════════════════
-async function renderAdmin(c) {
-  c.innerHTML=`<div class="section-title">⚙️ Admin Dashboard</div><div class="center"><div class="spinner"></div></div>`;
+// ADMIN
+async function renderAdmin(c){
+  c.innerHTML=`<div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:1rem">⚙️ Admin</div><div class="center"><div class="spinner"></div></div>`;
   const{data:users}=await sb.from('users').select('*');
-  const{data:allMikeka}=await sb.from('mikeka').select('stake,status,potential_return');
-  const won=(allMikeka||[]).filter(m=>m.status==='WON');
-  const staked=(allMikeka||[]).reduce((s,m)=>s+(m.stake||0),0);
-
+  const{data:allMk}=await sb.from('mikeka').select('stake,status');
+  const won=(allMk||[]).filter(m=>m.status==='WON'),staked=(allMk||[]).reduce((s,m)=>s+(m.stake||0),0);
   c.innerHTML=`
-    <div class="section-title">⚙️ Admin Dashboard</div>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:1rem">
-      ${[['👥',(users||[]).length,'Watumiaji','var(--text)'],['📋',(allMikeka||[]).length,'Mikeka Yote','var(--text)'],['🏆',won.length,'Zilizoshinda','var(--win)'],['💸',fmt(staked),'Total Staked','var(--accent)']].map(([ic,v,l,col])=>`
-        <div class="stat-box"><div class="stat-icon">${ic}</div><div class="stat-val" style="color:${col}">${v}</div><div class="stat-label">${l}</div></div>
-      `).join('')}
+    <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:1rem">⚙️ Admin Dashboard</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1rem">
+      ${[['👥',(users||[]).length,'Watumiaji','var(--text)'],['📋',(allMk||[]).length,'Mikeka Yote','var(--text)'],['🏆',won.length,'Zilizoshinda','var(--win)'],['💸',fmt(staked),'Total Staked','var(--accent)']].map(([ic,v,l,col])=>`<div class="stat-box"><div class="stat-icon">${ic}</div><div class="stat-val" style="color:${col}">${v}</div><div class="stat-label">${l}</div></div>`).join('')}
     </div>
     <div class="card">
-      <div style="font-size:12px; font-weight:700; color:var(--warn); margin-bottom:8px">👥 Watumiaji Wote</div>
-      ${(users||[]).map(u=>`
-        <div style="display:flex; justify-content:space-between; padding:.6rem 0; border-bottom:1px solid var(--border)">
-          <div>
-            <div style="font-weight:600; font-size:13px">${u.name} ${u.role==='admin'?'👑':''}</div>
-            <div style="font-size:10px; color:var(--muted)">${u.phone} · ${u.role}</div>
-          </div>
-          <div style="text-align:right">
-            <div style="color:var(--accent); font-weight:700; font-size:13px">TZS ${fmt(u.bankroll)}</div>
-          </div>
+      <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px">👥 Simamia Watumiaji</div>
+      ${(users||[]).map(u=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:.65rem 0;border-bottom:1px solid var(--border)">
+        <div><div style="font-weight:600;font-size:13px">${u.name}</div><div style="font-size:10px;color:var(--muted)">${u.phone}</div></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:11px;color:var(--accent)">TZS ${fmt(u.bankroll)}</div>
+          <select onchange="window._role('${u.id}',this.value)" style="padding:.3rem .5rem;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:11px">
+            ${['owner','analyst','viewer'].map(r=>`<option value="${r}" ${u.role===r?'selected':''}>${ROLES[r]||r}</option>`).join('')}
+          </select>
         </div>
-      `).join('')}
+      </div>`).join('')}
     </div>
-  `;
+    <div class="card" style="border-color:rgba(77,166,255,.3)">
+      <div style="font-size:12px;font-weight:700;color:var(--info);margin-bottom:10px">🤖 Gemini OCR — Weka API Key</div>
+      <input class="inp" id="gemini-key" placeholder="Paste Gemini API key hapa..." style="margin-bottom:8px" value="${GEMINI_KEY}"/>
+      <button onclick="window._saveGemini()" class="btn-ghost">💾 Hifadhi Key</button>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">Pata key bure: <a href="https://aistudio.google.com" target="_blank" style="color:var(--accent)">aistudio.google.com</a></div>
+    </div>`;
+  window._role=async(uid,role)=>{await sb.from('users').update({role}).eq('id',uid);toast(`Role → ${ROLES[role]}`);};
+  window._saveGemini=()=>{GEMINI_KEY=el('gemini-key')?.value||'';toast(GEMINI_KEY?'✅ Gemini key imehifadhiwa!':'Key ni empty','warn');};
 }
 
-// ═══════════════════════════════════════════════════════════════
 // BOOT
-// ═══════════════════════════════════════════════════════════════
 showAuth('login');
-
-// PWA — Register Service Worker
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
-}
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 </script>
 </body>
 </html>
