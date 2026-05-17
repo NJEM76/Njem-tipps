@@ -596,13 +596,18 @@ function renderPost(c){
   const regions=[...new Set(LEAGUES.map(l=>l.region))];
   c.innerHTML=`
     <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:1rem">➕ Mkeka Mpya</div>
-    <div class="ocr-zone" id="ocr-zone" onclick="el('ocr-in').click()">
-      <div style="font-size:28px;margin-bottom:8px">📸</div>
-      <div style="font-size:13px;font-weight:600;color:var(--accent)">Piga Picha ya Betslip</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">Gemini AI itasoma mechi zote automatically</div>
-      ${!GEMINI_KEY?'<div style="font-size:10px;color:var(--warn);margin-top:6px">⚠️ Weka Gemini key kwenye Admin → Settings</div>':'<div style="font-size:10px;color:var(--win);margin-top:6px">✅ Gemini iko tayari</div>'}
+    <div style="margin-bottom:.75rem">
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px">📸 Upload Betslip — AI Itasoma</div>
+      <label for="ocr-in" style="display:block;border:2px dashed var(--border);border-radius:14px;padding:1.25rem 1rem;text-align:center;cursor:pointer;background:rgba(0,255,133,.03);transition:border-color .2s" id="ocr-label">
+        <div style="font-size:32px;margin-bottom:8px">📸</div>
+        <div style="font-size:13px;font-weight:600;color:var(--accent)" id="ocr-txt">Bonyeza Hapa — Chagua Picha</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">JPG, PNG — Gemini AI itasoma mechi zote</div>
+        ${GEMINI_KEY
+          ? '<div style="font-size:10px;color:var(--win);margin-top:6px;font-weight:600">✅ Gemini iko tayari</div>'
+          : '<div style="font-size:10px;color:var(--warn);margin-top:6px">⚠️ Weka Gemini key kwenye Admin kwanza</div>'}
+      </label>
+      <input type="file" id="ocr-in" accept="image/*,image/jpeg,image/png,image/webp" capture="environment" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px"/>
     </div>
-    <input type="file" id="ocr-in" accept="image/*" style="display:none"/>
     <div style="background:${allOk?'#0f3520':'#1f1a00'};border:1px solid ${allOk?'rgba(0,255,133,.3)':'rgba(255,170,0,.3)'};border-radius:14px;padding:1rem;margin-bottom:.9rem">
       <div style="font-size:12px;font-weight:700;color:${allOk?'var(--win)':'var(--warn)'};margin-bottom:10px">${allOk?'✅ Checklist Imekamilika!':'⚠️ Pre-Bet Checklist'}</div>
       ${['Nimefanya research ya kutosha','Odds hizi zina value','Siko kwenye loss streak kubwa','Mechi zote ni kutoka leagues ninazojua'].map((l,i)=>`
@@ -645,19 +650,50 @@ function renderPost(c){
 
   wireInps();
 
-  el('ocr-in').onchange=async(e)=>{
-    const file=e.target.files[0];if(!file)return;
-    const zone=el('ocr-zone');zone.innerHTML='<div style="animation:pulse 1s infinite;color:var(--accent);font-size:13px;padding:1rem">🤖 Gemini inasoma picha...</div>';
-    const reader=new FileReader();
-    reader.onload=async(ev)=>{
-      const b64=ev.target.result.split(',')[1];
-      const extracted=await ocrImage(b64,file.type);
-      if(extracted.length>0){
-        pMatches=extracted.slice(0,MAX_MATCHES).map(m=>({...newM(),teams:m.teams||'',market:m.market||'1X2',odds:m.odds||'',pick:m.pick||''}));
-        toast(`✅ Mechi ${extracted.length} zimepatikana!`);renderPost(c);
-      }else{zone.innerHTML='<div style="color:var(--warn);font-size:13px;padding:1rem">⚠️ Jaza manually</div>';}
-    };reader.readAsDataURL(file);
-  };
+  // OCR handler - robust version for mobile
+  const ocrInput = el('ocr-in');
+  if(ocrInput){
+    // Remove old listeners
+    const newInput = ocrInput.cloneNode(true);
+    ocrInput.parentNode.replaceChild(newInput, ocrInput);
+    newInput.addEventListener('change', async function(e){
+      const file = e.target.files && e.target.files[0];
+      if(!file){toast('Hakuna picha iliyochaguliwa','warn');return;}
+      if(!GEMINI_KEY){toast('Weka Gemini API key kwenye Admin kwanza!','err');return;}
+      // Show loading state
+      const txt = el('ocr-txt');
+      const lbl = el('ocr-label');
+      if(txt) txt.textContent = '🤖 Gemini inasoma picha...';
+      if(lbl) lbl.style.borderColor = 'var(--accent)';
+      toast('📸 Picha imepokelewa — AI inasoma...','info');
+      const reader = new FileReader();
+      reader.onload = async(ev) => {
+        try{
+          const b64 = ev.target.result.split(',')[1];
+          const extracted = await ocrImage(b64, file.type);
+          if(extracted && extracted.length > 0){
+            pMatches = extracted.slice(0, MAX_MATCHES).map(m=>({
+              ...newM(),
+              teams: m.teams||'',
+              market: MARKETS.includes(m.market) ? m.market : 'Double Chance',
+              odds: m.odds||'',
+              pick: m.pick||m.market||''
+            }));
+            toast('✅ Mechi '+extracted.length+' zimepatikana!');
+            renderPost(c);
+          } else {
+            if(txt) txt.textContent = '⚠️ Mechi hazipatikani — Jaza manually';
+            toast('Mechi hazipatikani kwenye picha','warn');
+          }
+        }catch(err){
+          if(txt) txt.textContent = '❌ Hitilafu — Jaribu tena';
+          toast('Hitilafu: '+err.message,'err');
+        }
+      };
+      reader.onerror = () => toast('Imeshindwa kusoma picha','err');
+      reader.readAsDataURL(file);
+    });
+  }
   window._chk=(i)=>{pChecks[i]=!pChecks[i];renderPost(c);};
   window._kTog=()=>{kOn=!kOn;renderPost(c);};
   window._kSlide=(v)=>{kProb=parseInt(v);const p=el('k-pct');if(p)p.textContent=v+'%';};
