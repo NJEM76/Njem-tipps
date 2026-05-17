@@ -87,7 +87,7 @@
 import{createClient}from'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 const SUPA_URL='https://mhmcvvfoylbnwqfwioys.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1obWN2dmZveWxibndxZndpb3lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5Mzc3NDUsImV4cCI6MjA5NDUxMzc0NX0.DJx01EDheWCjpq2nkdK0aljTmf9irfTugPhn_fTXSWM';
-let GEMINI_KEY=localStorage.getItem('njem_gemini_key')||'';
+let GEMINI_KEY=localStorage.getItem('njem_or_key')||localStorage.getItem('njem_gemini_key')||'';
 const sb=createClient(SUPA_URL,SUPA_KEY);
 const MAX_MATCHES=6;
 const LOSS_STREAK_LIMIT=3;
@@ -617,9 +617,9 @@ function renderPost(c){
       <label for="ocr-in" style="display:block;border:2px dashed var(--border);border-radius:14px;padding:1.25rem 1rem;text-align:center;cursor:pointer;background:rgba(0,255,133,.03);transition:border-color .2s" id="ocr-label">
         <div style="font-size:32px;margin-bottom:8px">📸</div>
         <div style="font-size:13px;font-weight:600;color:var(--accent)" id="ocr-txt">Bonyeza Hapa — Chagua Picha</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:4px">JPG, PNG — Gemini AI itasoma mechi zote</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">JPG, PNG — OpenRouter AI itasoma mechi zote</div>
         ${GEMINI_KEY
-          ? '<div style="font-size:10px;color:var(--win);margin-top:6px;font-weight:600">✅ Gemini iko tayari</div>'
+          ? '<div style="font-size:10px;color:var(--win);margin-top:6px;font-weight:600">✅ OpenRouter iko tayari</div>'
           : '<div style="font-size:10px;color:var(--warn);margin-top:6px">⚠️ Weka OpenRouter key kwenye Admin kwanza</div>'}
       </label>
       <input type="file" id="ocr-in" accept="image/*,image/jpeg,image/png,image/webp" capture="environment" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px"/>
@@ -679,7 +679,7 @@ function renderPost(c){
       // Show loading state
       const txt = el('ocr-txt');
       const lbl = el('ocr-label');
-      if(txt) txt.textContent = '🤖 Gemini inasoma picha...';
+      if(txt) txt.textContent = '🤖 OpenRouter AI inasoma picha...';
       if(lbl) lbl.style.borderColor = 'var(--accent)';
       toast('📸 Picha imepokelewa — AI inasoma...','info');
       const reader = new FileReader();
@@ -920,7 +920,7 @@ async function renderAdmin(c){
       <div style="font-size:11px;color:var(--muted);margin-top:8px">Pata key bure: <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent)">openrouter.ai/keys</a> (inaanza na sk-or-v1-...)</div>
     </div>`;
   window._role=async(uid,role)=>{await sb.from('users').update({role}).eq('id',uid);toast(`Role → ${ROLES[role]}`);};
-  window._saveGemini=()=>{GEMINI_KEY=el('gemini-key')?.value||'';localStorage.setItem('njem_gemini_key',GEMINI_KEY);toast(GEMINI_KEY?'✅ Gemini key imehifadhiwa! Inafanya kazi sasa.':'Key ni empty','warn');renderAdmin(c);};
+  window._saveGemini=()=>{GEMINI_KEY=el('gemini-key')?.value||'';localStorage.setItem('njem_or_key',GEMINI_KEY);localStorage.removeItem('njem_gemini_key');toast(GEMINI_KEY?'✅ Gemini key imehifadhiwa! Inafanya kazi sasa.':'Key ni empty','warn');renderAdmin(c);};
 }
 
 // BOOT
