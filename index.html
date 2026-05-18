@@ -106,7 +106,7 @@ const SPORTSDB_KEY = '447279'; // Free tier key
 
 // Map our league IDs to TheSportsDB league IDs
 const LEAGUE_MAP = {
-  // EUROPE
+  // EUROPE TOP
   'epl':          '4328',
   'laliga':       '4335',
   'bundesliga':   '4331',
@@ -133,6 +133,28 @@ const LEAGUE_MAP = {
   'serbian':      '4363',
   'rpl':          '4361',
   'ekstraklasa':  '4365',
+  // EUROPE EXTRA
+  'ukraine':      '4372',
+  'armenia':      '4373',
+  'georgia':      '4374',
+  'kazakhstan':   '4375',
+  'azerbaijan':   '4376',
+  'belarus':      '4377',
+  'slovakia':     '4378',
+  'slovenia':     '4379',
+  'bulgarian':    '4369',
+  'hungarian':    '4370',
+  'albanian':     '4371',
+  'finnish':      '4380',
+  'irish':        '4381',
+  'welsh':        '4382',
+  'faroe':        '4383',
+  'luxemburg':    '4384',
+  'moldova':      '4385',
+  'northern_irl': '4386',
+  'israelipl':    '4387',
+  'cypriot':      '4389',
+  'maltese':      '4390',
   // AFRICA
   'tpl':          '4637',
   'kpl':          '4391',
@@ -146,13 +168,30 @@ const LEAGUE_MAP = {
   'zambia':       '4398',
   'morocco':      '4399',
   'ethiopia':     '4400',
+  'angola':       '4401',
+  'senegal':      '4402',
+  'ivory_coast':  '4403',
+  'cameroon':     '4404',
+  'algeria':      '4405',
+  'tunisia':      '4413',
+  'mozambique':   '4414',
+  'zimbabwe':     '4415',
+  'botswana':     '4416',
+  'namibia':      '4417',
   // AMERICAS
-  'mls':          '4346',
+  'mls':          '4480',
   'brasileirao':  '4351',
   'liga_mx':      '4350',
   'argentina':    '4406',
   'colombia':     '4407',
   'chile':        '4408',
+  'peru':         '4418',
+  'ecuador':      '4419',
+  'venezuela':    '4420',
+  'uruguay':      '4421',
+  'paraguay':     '4422',
+  'bolivia':      '4423',
+  'costa_rica':   '4424',
   // ASIA
   'jleague':      '4356',
   'kleague':      '4343',
@@ -161,31 +200,58 @@ const LEAGUE_MAP = {
   'saudi':        '4349',
   'uae':          '4411',
   'qatar':        '4412',
+  'iran':         '4425',
+  'iraq':         '4426',
+  'jordan':       '4427',
+  'thailand':     '4428',
+  'vietnam':      '4429',
+  'malaysia':     '4430',
+  'indonesia':    '4431',
+  'philippines':  '4432',
+  'singapore':    '4433',
+  'australia':    '4434',
 };
 
 let liveScores = {}; // { "Team A vs Team B": { home: 1, away: 0, minute: 67, status: "live" } }
 let liveInterval = null;
 let liveEnabled = false;
 
-// Fetch live scores for today's matches
+// Fetch live scores + upcoming fixtures for today and tomorrow
 async function fetchLiveScores() {
   try {
     const today = new Date().toISOString().split('T')[0];
-    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsday.php?d=${today}&s=Soccer`);
-    if (!res.ok) return;
-    const data = await res.json();
-    const events = data.events || [];
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+    // Fetch today and tomorrow in parallel
+    const [res1, res2] = await Promise.all([
+      fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsday.php?d=${today}&s=Soccer`),
+      fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsday.php?d=${tomorrow}&s=Soccer`)
+    ]);
+    const [d1, d2] = await Promise.all([res1.json(), res2.json()]);
+    const events = [...(d1.events||[]), ...(d2.events||[])];
     const newScores = {};
     events.forEach(ev => {
       if (!ev.strHomeTeam || !ev.strAwayTeam) return;
       const key1 = `${ev.strHomeTeam} vs ${ev.strAwayTeam}`.toLowerCase();
       const key2 = `${ev.strAwayTeam} vs ${ev.strHomeTeam}`.toLowerCase();
-      // Parse minute from strProgress e.g "45'" or "67'"
+      // Parse minute from strProgress e.g "45'", "45+2'", or strStatus
       let minute = '';
       let minuteNum = 0;
-      if (ev.strProgress) {
-        minute = ev.strProgress.replace("'","") + "'";
-        minuteNum = parseInt(ev.strProgress) || 0;
+      if (ev.strProgress && ev.strProgress.trim()) {
+        const rawProg = ev.strProgress.trim();
+        minute = rawProg.includes("'") ? rawProg : rawProg + "'";
+        minuteNum = parseInt(rawProg) || 0;
+      } else if (ev.strStatus === 'HT') {
+        minute = "HT";
+        minuteNum = 45;
+      } else if (ev.strStatus === '1H') {
+        minute = "1H";
+        minuteNum = 30;
+      } else if (ev.strStatus === '2H') {
+        minute = "2H";
+        minuteNum = 70;
+      } else if (ev.strStatus === 'ET') {
+        minute = "ET";
+        minuteNum = 105;
       }
       const isLive = ['1H','2H','HT','ET','LIVE'].includes(ev.strStatus);
       const isFinished = ['FT','AET','PEN','FT_PEN'].includes(ev.strStatus);
@@ -239,55 +305,68 @@ function findScore(teamsStr) {
 }
 
 // Auto-settle betslip matches that are finished
+// Uses ALL mikeka (allMikeka) so even viewers' watched mikeka get settled
 async function autoSettleMatches() {
   if (!currentUser) return;
-  const pendingMikeka = mikeka.filter(m => m.status === 'PENDING');
-  
+  // Only owners/analysts can settle (they own the bankroll)
+  if (currentUser.role !== 'owner' && currentUser.role !== 'analyst') return;
+
+  // Get all PENDING mikeka belonging to this user
+  const pendingMikeka = allMikeka.filter(m => m.status === 'PENDING' && m.user_id === currentUser.id);
+  let anySettled = false;
+
   for (const mk of pendingMikeka) {
     const matches = mk.matches || [];
-    let allSettled = true;
     let needsUpdate = false;
-    
+
     for (const match of matches) {
       if (match.outcome !== 'PENDING') continue;
-      
+
       const score = findScore(match.teams);
-      if (!score || !score.isFinished) { allSettled = false; continue; }
-      
+      if (!score || !score.isFinished) continue;
+
       // Determine outcome based on market and pick
       const outcome = determineOutcome(match, score);
       if (outcome) {
-        await sb.from('matches').update({ outcome }).eq('id', match.id);
-        match.outcome = outcome;
-        needsUpdate = true;
-        toast(`✅ Auto: ${match.teams} — ${outcome}`, 'info');
-      } else {
-        allSettled = false;
+        try {
+          await sb.from('matches').update({ outcome }).eq('id', match.id);
+          match.outcome = outcome;
+          needsUpdate = true;
+          toast(`✅ Auto-settle: ${match.teams.split(' vs ')[0]} — ${outcome}`, 'info');
+        } catch(e) { /* ignore */ }
       }
     }
-    
-    // Check if whole mkeka is settled
+
     if (needsUpdate) {
-      const { data: freshMatches } = await sb.from('matches').select('*').eq('mkeka_id', mk.id);
-      const allDone = (freshMatches || []).every(m => m.outcome !== 'PENDING');
-      if (allDone) {
-        const hasLoss = (freshMatches || []).some(m => m.outcome === 'LOSS');
-        const allVoid = (freshMatches || []).every(m => m.outcome === 'VOID');
-        const newStatus = hasLoss ? 'LOST' : allVoid ? 'VOID' : 'WON';
-        await sb.from('mikeka').update({ status: newStatus }).eq('id', mk.id);
-        if (newStatus === 'WON') {
-          const gain = (mk.potential_return || 0) - (mk.stake || 0);
-          await updateUser({ bankroll: currentUser.bankroll + gain });
-          // Push notification
-          showNotification('🎉 Mkeka Umeshinda!', `+TZS ${fmt(gain)} — ${mk.name}`);
-          toast(`🎉 AUTO WIN! +TZS ${fmt(gain)}`, 'ok');
-        } else if (newStatus === 'LOST') {
-          showNotification('❌ Mkeka Umepoteza', mk.name || 'Mkeka');
+      try {
+        const { data: freshMatches } = await sb.from('matches').select('*').eq('mkeka_id', mk.id);
+        const pending = (freshMatches||[]).filter(m=>m.outcome==='PENDING');
+        const hasLoss = (freshMatches||[]).some(m=>m.outcome==='LOSS');
+
+        // If there's already a LOSS, no need to wait — mkeka is LOST
+        if (hasLoss) {
+          await sb.from('mikeka').update({ status: 'LOST' }).eq('id', mk.id);
+          showNotification('❌ Mkeka Umepoteza', mk.name||'Mkeka');
+          toast(`❌ ${mk.name||'Mkeka'} imepoteza (auto)`, 'err');
+          anySettled = true;
+        } else if (pending.length === 0) {
+          // All matches settled, none lost
+          const allVoid = (freshMatches||[]).every(m=>m.outcome==='VOID');
+          const newStatus = allVoid ? 'VOID' : 'WON';
+          await sb.from('mikeka').update({ status: newStatus }).eq('id', mk.id);
+          if (newStatus === 'WON') {
+            const gain = (mk.potential_return||0) - (mk.stake||0);
+            if (gain > 0) await updateUser({ bankroll: currentUser.bankroll + gain });
+            showNotification('🎉 Mkeka Umeshinda!', `+TZS ${fmt(gain)} — ${mk.name}`);
+            toast(`🎉 AUTO WIN! +TZS ${fmt(gain)}`, 'ok');
+          }
+          anySettled = true;
         }
-        await loadData();
-      }
+      } catch(e) { /* ignore settle error */ }
     }
   }
+
+  if (anySettled) await loadData();
 }
 
 // Determine match outcome from score
@@ -761,7 +840,7 @@ async function showMatchDetailsModal(teamsStr, eventId) {
       <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:10px">📊 Match Statistics</div>
 
       ${statRow('Possession', stats.possession_home+'%', stats.possession_away+'%', stats.possession_home)}
-      ${statRow('Shots', stats.shots_home, stats.shots_away, typeof stats.shots_home==='number'?Math.round(stats.shots_home/(parseInt(stats.shots_home)||1+parseInt(stats.shots_away)||1)*100):50)}
+      ${statRow('Shots', stats.shots_home, stats.shots_away, (()=>{const h=parseInt(stats.shots_home)||0,a=parseInt(stats.shots_away)||0,t=h+a;return t>0?Math.round(h/t*100):50;})())}
       ${statRow('Shots on Target', stats.shots_on_home, stats.shots_on_away, 50)}
       ${statRow('Corners', stats.corners_home, stats.corners_away, 50)}
       ${statRow('Fouls', stats.fouls_home, stats.fouls_away, 50)}
@@ -928,6 +1007,46 @@ const LEAGUES=[
   {id:'saudi',name:'Saudi Pro League',flag:'🇸🇦',region:'Asia'},
   {id:'uae',name:'UAE Pro League',flag:'🇦🇪',region:'Asia'},
   {id:'qatar',name:'Qatar Stars League',flag:'🇶🇦',region:'Asia'},
+  {id:'iran',name:'Persian Gulf Pro League',flag:'🇮🇷',region:'Asia'},
+  {id:'iraq',name:'Iraqi Premier League',flag:'🇮🇶',region:'Asia'},
+  {id:'jordan',name:'Jordan Premier League',flag:'🇯🇴',region:'Asia'},
+  {id:'thailand',name:'Thai League 1',flag:'🇹🇭',region:'Asia'},
+  {id:'vietnam',name:'V.League 1',flag:'🇻🇳',region:'Asia'},
+  {id:'malaysia',name:'Super League Malaysia',flag:'🇲🇾',region:'Asia'},
+  {id:'indonesia',name:'Liga 1 Indonesia',flag:'🇮🇩',region:'Asia'},
+  {id:'australia',name:'A-League Australia',flag:'🇦🇺',region:'Asia'},
+  // EUROPE EXTRA
+  {id:'ukraine',name:'Ukrainian Premier League',flag:'🇺🇦',region:'Europe'},
+  {id:'armenia',name:'Armenian Premier League',flag:'🇦🇲',region:'Europe'},
+  {id:'georgia',name:'Erovnuli Liga Georgia',flag:'🇬🇪',region:'Europe'},
+  {id:'kazakhstan',name:'Kazakhstan Premier League',flag:'🇰🇿',region:'Europe'},
+  {id:'azerbaijan',name:'Azerbaijan Premier League',flag:'🇦🇿',region:'Europe'},
+  {id:'belarus',name:'Belarusian Premier League',flag:'🇧🇾',region:'Europe'},
+  {id:'slovakia',name:'Slovak Super Liga',flag:'🇸🇰',region:'Europe'},
+  {id:'slovenia',name:'Slovenian PrvaLiga',flag:'🇸🇮',region:'Europe'},
+  {id:'bulgarian',name:'Bulgarian First League',flag:'🇧🇬',region:'Europe'},
+  {id:'hungarian',name:'Nemzeti Bajnokság Hungary',flag:'🇭🇺',region:'Europe'},
+  {id:'albanian',name:'Kategoria Superiore Albania',flag:'🇦🇱',region:'Europe'},
+  {id:'finnish',name:'Veikkausliiga Finland',flag:'🇫🇮',region:'Europe'},
+  {id:'irish',name:'League of Ireland',flag:'🇮🇪',region:'Europe'},
+  {id:'israelipl',name:'Israeli Premier League',flag:'🇮🇱',region:'Europe'},
+  // AFRICA EXTRA
+  {id:'angola',name:'Girabola Angola',flag:'🇦🇴',region:'Africa'},
+  {id:'senegal',name:'Ligue 1 Senegal',flag:'🇸🇳',region:'Africa'},
+  {id:'ivory_coast',name:'MTN Ligue 1 Ivory Coast',flag:'🇨🇮',region:'Africa'},
+  {id:'cameroon',name:'MTN Elite One Cameroon',flag:'🇨🇲',region:'Africa'},
+  {id:'algeria',name:'Ligue Professionnelle 1 Algeria',flag:'🇩🇿',region:'Africa'},
+  {id:'tunisia',name:'Ligue 1 Tunisie',flag:'🇹🇳',region:'Africa'},
+  {id:'mozambique',name:'Moçambola',flag:'🇲🇿',region:'Africa'},
+  {id:'zimbabwe',name:'Castle Lager Premier League',flag:'🇿🇼',region:'Africa'},
+  // AMERICAS EXTRA
+  {id:'peru',name:'Liga 1 Peru',flag:'🇵🇪',region:'Americas'},
+  {id:'ecuador',name:'LigaPro Ecuador',flag:'🇪🇨',region:'Americas'},
+  {id:'venezuela',name:'Liga FUTVE Venezuela',flag:'🇻🇪',region:'Americas'},
+  {id:'uruguay',name:'Primera División Uruguay',flag:'🇺🇾',region:'Americas'},
+  {id:'paraguay',name:'División Profesional Paraguay',flag:'🇵🇾',region:'Americas'},
+  {id:'bolivia',name:'División Profesional Bolivia',flag:'🇧🇴',region:'Americas'},
+  {id:'costa_rica',name:'Primera División Costa Rica',flag:'🇨🇷',region:'Americas'},
 ];
 const MARKETS=[
   '1X2','Double Chance','Draw No Bet',
@@ -952,7 +1071,7 @@ const genOTP=()=>Math.floor(100000+Math.random()*900000).toString();
 const el=(id)=>document.getElementById(id);
 const lgName=(id)=>LEAGUES.find(l=>l.id===id)?.name||id;
 const lgFlag=(id)=>LEAGUES.find(l=>l.id===id)?.flag||'🌐';
-const sc=(s)=>s==='WON'?'var(--win)':s==='LOST'?'var(--loss)':s==='PENDING'?'var(--warn)':'#888';
+const sc=(s)=>s==='WON'||s==='WIN'?'var(--win)':s==='LOST'||s==='LOSS'?'var(--loss)':s==='PENDING'?'var(--warn)':'#888';
 let currentUser=null,mikeka=[],allMikeka=[],realtimeChannel=null,currentTab='home';
 
 // TOAST
@@ -1084,17 +1203,27 @@ async function updateUser(updates){
   }
 }
 async function loadData(){
-  const{data:my}=await sb.from('mikeka').select('*,matches(*)').eq('user_id',currentUser.id).order('created_at',{ascending:false});
-  mikeka=my||[];
-  const{data:all}=await sb.from('mikeka').select('*,matches(*),users(name,role)').order('created_at',{ascending:false}).limit(50);
+  // Load all mikeka — viewers see all mikeka from all analysts/owners
+  const{data:all}=await sb.from('mikeka').select('*,matches(*),users(name,role)').order('created_at',{ascending:false}).limit(100);
   allMikeka=all||[];
+  // Personal stats (bankroll/reports) = own mikeka only for analysts/owners; viewers see all
+  if(currentUser.role==='owner'||currentUser.role==='analyst'){
+    mikeka=(all||[]).filter(m=>m.user_id===currentUser.id);
+  } else {
+    mikeka=all||[];
+  }
 }
 function startRealtime(){
   realtimeChannel=sb.channel('njem-v2')
     .on('postgres_changes',{event:'*',schema:'public',table:'mikeka'},async()=>{
       await loadData();
       if(['home','feed','mikeka','results'].includes(currentTab))showTab(currentTab);
-    }).subscribe();
+    })
+    .on('postgres_changes',{event:'*',schema:'public',table:'matches'},async()=>{
+      await loadData();
+      if(['home','feed','mikeka','results'].includes(currentTab))showTab(currentTab);
+    })
+    .subscribe();
 }
 function getStreak(){
   const s=[...mikeka].filter(m=>m.status!=='PENDING'&&m.status!=='VOID');
@@ -1282,14 +1411,25 @@ function showBankrollModal(){
 
 // HOME
 function renderHome(c){
+  const isOwner=currentUser.role==='owner',isAnalyst=currentUser.role==='analyst'||isOwner;
+  const isViewer=currentUser.role==='viewer';
   const won=mikeka.filter(m=>m.status==='WON'),lost=mikeka.filter(m=>m.status==='LOST'),settled=[...won,...lost];
-  const staked=mikeka.reduce((s,m)=>s+(m.stake||0),0);
-  const ret=won.reduce((s,m)=>s+(m.potential_return||0),0);
+  const staked=isViewer?0:mikeka.reduce((s,m)=>s+(m.stake||0),0);
+  const ret=isViewer?0:won.reduce((s,m)=>s+(m.potential_return||0),0);
   const profit=ret-staked,roi=staked>0?((profit/staked)*100).toFixed(1):'0.0';
   const wr=settled.length>0?((won.length/settled.length)*100).toFixed(1):'0.0';
   const pending=mikeka.filter(m=>m.status==='PENDING'),streak=getStreak();
-  const isOwner=currentUser.role==='owner',isAnalyst=currentUser.role==='analyst'||isOwner;
   c.innerHTML=`
+    ${isViewer ? `
+    <div style="background:linear-gradient(135deg,#0f3520,#092518);border:1px solid rgba(0,255,133,.2);border-radius:20px;padding:1.5rem;margin-bottom:1rem" class="glow">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">📡 Muhtasari wa Mikeka</div>
+      <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:var(--accent);letter-spacing:-1px">${mikeka.length} Mikeka</div>
+      <div style="display:flex;gap:1.5rem;margin-top:10px">
+        <div><div style="font-size:10px;color:var(--muted)">Imeshinda</div><div style="font-size:15px;font-weight:700;color:var(--win)">${won.length}</div></div>
+        <div><div style="font-size:10px;color:var(--muted)">Win Rate</div><div style="font-size:15px;font-weight:700;color:${parseFloat(wr)>=50?'var(--win)':'var(--loss)'}">${wr}%</div></div>
+        <div><div style="font-size:10px;color:var(--muted)">Pending</div><div style="font-size:15px;font-weight:700;color:var(--warn)">${pending.length}</div></div>
+      </div>
+    </div>` : `
     <div style="background:linear-gradient(135deg,#0f3520,#092518);border:1px solid rgba(0,255,133,.2);border-radius:20px;padding:1.5rem;margin-bottom:1rem" class="glow">
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Bankroll Yako</div>
       <div style="font-family:'Syne',sans-serif;font-size:38px;font-weight:800;color:var(--accent);letter-spacing:-1px">TZS ${fmt(currentUser.bankroll)}</div>
@@ -1299,7 +1439,7 @@ function renderHome(c){
         <div><div style="font-size:10px;color:var(--muted)">Pending</div><div style="font-size:15px;font-weight:700;color:var(--warn)">${pending.length}</div></div>
       </div>
       ${isOwner?`<button onclick="window._bk()" style="margin-top:12px;padding:.4rem 1rem;border-radius:20px;border:1px solid rgba(0,255,133,.3);background:rgba(0,255,133,.08);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer">➕ Ongeza / ➖ Toa</button>`:''}
-    </div>
+    </div>`}
     <div class="stats-grid">
       <div class="stat-box"><div class="stat-icon">📋</div><div class="stat-val">${mikeka.length}</div><div class="stat-label">Mikeka</div></div>
       <div class="stat-box"><div class="stat-icon">✅</div><div class="stat-val" style="color:var(--win)">${won.length}</div><div class="stat-label">Imeshinda</div></div>
@@ -1325,60 +1465,79 @@ function renderHome(c){
       <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px">🛡️ NJEM System Rules</div>
       ${[['✅','Max mechi 6 kwa accumulator'],['✅','Double Chance ni market bora'],['✅','Kelly Criterion kwa staking'],['✅','Cashout @ 70% ya lengo'],['🚨',`Loss ${LOSS_STREAK_LIMIT}+ mfululizo → Simama!`],['🤖','AI inakuonya kabla ya kuweka']].map(([i,r])=>`<div style="display:flex;gap:8px;font-size:12px;color:#5a9e70;margin-bottom:6px"><span>${i}</span><span>${r}</span></div>`).join('')}
     </div>
-    ${mikeka.slice(0,3).map(m=>mkCard(m,true)).join('')}`;
+    <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px">📋 Mikeka ya Hivi Karibuni</div>
+    ${mikeka.slice(0,3).map(m=>mkCard(m,true,currentUser.role==='viewer')).join('')}
+    ${mikeka.length===0?'<div class="empty"><div style="font-size:44px">📋</div><div style="margin-top:8px">Hakuna mikeka bado</div></div>':''}`;
 
   // Render live matches section
   renderLiveSection();
 }
 
+// Live section tab state
+let liveSectionTab = 'live'; // 'live' | 'upcoming' | 'finished'
+
 function renderLiveSection() {
   const sec = el('live-section');
   if (!sec) return;
 
-  const liveMatches = Object.values(liveScores).filter(s => s.isLive);
-  // deduplicate
+  // Deduplicate all scores by homeTeam+awayTeam
   const seen = new Set();
-  const unique = liveMatches.filter(s => {
+  const allMatches = Object.values(liveScores).filter(s => {
     const k = s.homeTeam + s.awayTeam;
     if (seen.has(k)) return false;
     seen.add(k); return true;
   });
 
-  if (!unique.length) {
+  const liveM = allMatches.filter(s => s.isLive);
+  const upcomingM = allMatches.filter(s => s.isUpcoming).sort((a,b) => (a.time||'').localeCompare(b.time||''));
+  const finishedM = allMatches.filter(s => s.isFinished);
+
+  if (!allMatches.length) {
     sec.innerHTML = '';
     return;
   }
 
+  const tabStyle = (t) => `flex:1;padding:.4rem;border-radius:10px;border:none;background:${liveSectionTab===t?'rgba(0,255,133,.15)':'transparent'};color:${liveSectionTab===t?'var(--accent)':'var(--muted)'};font-weight:700;font-size:11px;cursor:pointer`;
+
+  const matchCard = (s) => `
+    <div onclick="window._showMatchDetails('${s.homeTeam.replace(/'/g,"\'")} vs ${s.awayTeam.replace(/'/g,"\'")}','${s.eventId}')"
+      style="background:var(--surface);border:1px solid ${s.isLive?'rgba(255,68,68,.4)':s.isFinished?'var(--border)':'rgba(0,255,133,.15)'};border-radius:12px;padding:.75rem;display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:6px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.homeTeam}</div>
+        <div style="font-size:10px;color:var(--muted);margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.league}</div>
+        <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.awayTeam}</div>
+      </div>
+      <div style="text-align:center;min-width:85px;padding-left:8px">
+        ${s.isLive ? `
+          <div style="font-size:20px;font-weight:800;color:var(--danger);letter-spacing:2px">${s.home}-${s.away}</div>
+          <div style="font-size:11px;color:var(--danger);font-weight:700;animation:pulse 1s infinite">🔴 ${s.minute||s.status||'LIVE'}</div>
+        ` : s.isFinished ? `
+          <div style="font-size:20px;font-weight:800;color:var(--muted);letter-spacing:2px">${s.home}-${s.away}</div>
+          <div style="font-size:10px;color:var(--muted);font-weight:600">⚫ FT</div>
+        ` : `
+          <div style="font-size:17px;font-weight:800;color:var(--accent)">${s.time||'--:--'}</div>
+          <div style="font-size:10px;color:var(--muted)">🕐 Leo</div>
+        `}
+      </div>
+    </div>`;
+
+  const activeList = liveSectionTab==='live' ? liveM : liveSectionTab==='upcoming' ? upcomingM : finishedM;
+  const emptyMsg = liveSectionTab==='live' ? 'Hakuna mechi zinazochezwa sasa' : liveSectionTab==='upcoming' ? 'Hakuna fixtures za leo' : 'Hakuna matokeo bado';
+
   sec.innerHTML = `
-    <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px;display:flex;align-items:center;gap:6px">
-      <span style="animation:pulse 1s infinite">🔴</span> Live Sasa Hivi (${unique.length})
-      <span style="margin-left:auto;font-size:10px;color:var(--muted);font-weight:400">Bonyeza mechi kwa details</span>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:6px">
-      ${unique.slice(0,8).map(s => `
-        <div onclick="window._showMatchDetails('${s.homeTeam.replace(/'/g,"\'")} vs ${s.awayTeam.replace(/'/g,"\'")}','${s.eventId}')"
-          style="background:var(--surface);border:1px solid ${s.isLive?'rgba(255,68,68,.4)':'rgba(26,53,34,.8)'};border-radius:12px;padding:.75rem;display:flex;justify-content:space-between;align-items:center;cursor:pointer;transition:border .2s">
-          <div style="flex:1">
-            <div style="font-size:12px;font-weight:600">${s.homeTeam}</div>
-            <div style="font-size:10px;color:var(--muted);margin:2px 0">${s.league}</div>
-            <div style="font-size:12px;font-weight:600">${s.awayTeam}</div>
-          </div>
-          <div style="text-align:center;min-width:80px">
-            ${s.isLive ? `
-              <div style="font-size:22px;font-weight:800;color:var(--danger);letter-spacing:2px">${s.home} - ${s.away}</div>
-              <div style="font-size:10px;color:var(--danger);font-weight:700;animation:pulse 1s infinite">🔴 ${s.minute||'LIVE'}</div>
-            ` : s.isFinished ? `
-              <div style="font-size:22px;font-weight:800;color:var(--muted);letter-spacing:2px">${s.home} - ${s.away}</div>
-              <div style="font-size:10px;color:var(--muted)">FT</div>
-            ` : `
-              <div style="font-size:14px;font-weight:700;color:var(--text)">${s.time||'--:--'}</div>
-              <div style="font-size:10px;color:var(--muted)">Inakuja</div>
-            `}
-          </div>
-        </div>`).join('')}
+    <div style="margin-bottom:8px">
+      <div style="display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:4px;margin-bottom:8px">
+        <button onclick="window._lsTab('live')" style="${tabStyle('live')}">🔴 Live ${liveM.length?'('+liveM.length+')':''}</button>
+        <button onclick="window._lsTab('upcoming')" style="${tabStyle('upcoming')}">🕐 Fixtures ${upcomingM.length?'('+upcomingM.length+')':''}</button>
+        <button onclick="window._lsTab('finished')" style="${tabStyle('finished')}">⚫ Matokeo ${finishedM.length?'('+finishedM.length+')':''}</button>
+      </div>
+      ${activeList.length===0
+        ? `<div style="text-align:center;color:var(--muted);padding:1rem;font-size:12px">${emptyMsg}</div>`
+        : activeList.slice(0,12).map(matchCard).join('')
+      }
     </div>
   `;
-
+  window._lsTab = (t) => { liveSectionTab = t; renderLiveSection(); };
 }
 
 // FEED
@@ -1415,27 +1574,32 @@ function renderFeed(c){
 let mkF='ALL',mkQ='';
 function renderMikeka(c){
   const shown=mikeka.filter(m=>mkF==='ALL'||m.status===mkF).filter(m=>!mkQ||m.name?.toLowerCase().includes(mkQ)||m.matches?.some(x=>x.teams?.toLowerCase().includes(mkQ)));
+  const isViewer=currentUser.role==='viewer';
   c.innerHTML=`
     <input class="inp" id="mk-q" placeholder="🔍 Tafuta mkeka au timu..." value="${mkQ}" style="margin-bottom:.75rem"/>
     <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:.75rem">
       ${['ALL','PENDING','WON','LOST','VOID'].map(f=>`<button class="btn-outline ${mkF===f?'active':''}" onclick="window._mkF('${f}')" style="${mkF===f?`border-color:${sc(f)};background:${sc(f)}22;color:${sc(f)}`:''}">
         ${f} <span style="opacity:.6">${mikeka.filter(m=>f==='ALL'||m.status===f).length}</span></button>`).join('')}
     </div>
-    ${shown.length===0?'<div class="empty"><div style="font-size:44px">📋</div><div style="margin-top:8px">Hakuna mikeka</div></div>':shown.map(m=>mkCard(m,false)).join('')}`;
+    ${shown.length===0?'<div class="empty"><div style="font-size:44px">📋</div><div style="margin-top:8px">Hakuna mikeka</div></div>':shown.map(m=>mkCard(m,false,isViewer)).join('')}`;
   el('mk-q').oninput=(e)=>{mkQ=e.target.value.toLowerCase();renderMikeka(c);};
   window._mkF=(f)=>{mkF=f;renderMikeka(c);};
-  c.querySelectorAll('[data-exp]').forEach(btn=>{
-    btn.onclick=()=>{const d=el('det-'+btn.dataset.exp);if(d)d.style.display=d.style.display==='none'?'block':'none';};
-  });
+  // Wire expand/collapse after DOM is ready
+  setTimeout(()=>{
+    c.querySelectorAll('[data-exp]').forEach(btn=>{
+      btn.onclick=()=>{const d=el('det-'+btn.dataset.exp);if(d)d.style.display=d.style.display==='none'?'block':'none';};
+    });
+  },0);
 }
 
-function mkCard(m,mini){
+function mkCard(m,mini,isViewer=false){
   const matches=m.matches||[];
+  const poster=m.users?.name||'';
   return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-bottom:.6rem;overflow:hidden">
     <div data-exp="${m.id}" style="padding:.85rem;cursor:${mini?'default':'pointer'};display:flex;justify-content:space-between;align-items:center">
-      <div style="flex:1">
-        <div style="font-weight:600;font-size:13px">${m.name||'Mkeka #'+m.id.slice(-4)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${m.date} · ${matches.length} mechi · TZS ${fmt(m.stake)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.name||'Mkeka #'+m.id.slice(-4)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${m.date} · ${matches.length} mechi${isViewer&&poster?' · 👤 '+poster:' · TZS '+fmt(m.stake)}</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
         <div style="background:${sc(m.status)}22;color:${sc(m.status)};padding:.15rem .55rem;border-radius:20px;font-size:10px;font-weight:700">${m.status}</div>
@@ -1460,7 +1624,7 @@ let pMatches=[],pChecks=[false,false,false,false],kOn=false,kProb=55;
 function renderPost(c){
   if(!pMatches.length)pMatches=[newM()];
   const tOdds=pMatches.reduce((p,m)=>p*(parseFloat(m.odds)||1),1);
-  const stake=parseInt(el('post-stake')?.value||currentUser.stake||5000);
+  const stake=parseInt(el('post-stake')?.value||currentUser.default_stake||5000);
   const potRet=Math.round(tOdds*stake);
   const kF=kelly(tOdds,kProb/100),kStake=Math.round(currentUser.bankroll*kF/1000)*1000;
   const allOk=pChecks.every(Boolean),risk=analyzeRisk(pMatches);
@@ -1495,7 +1659,7 @@ function renderPost(c){
     <input class="inp" id="post-name" placeholder="Jina la mkeka (optional)" style="margin-bottom:10px"/>
     <div class="grid-2" style="margin-bottom:10px">
       <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">Tarehe</div><input type="date" class="inp-sm" id="post-date" value="${today()}"/></div>
-      <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">Stake (TZS)</div><input type="number" class="inp-sm" id="post-stake" value="${currentUser.stake||5000}"/></div>
+      <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">Stake (TZS)</div><input type="number" class="inp-sm" id="post-stake" value="${currentUser.default_stake||5000}"/></div>
     </div>
     <div class="card" style="margin-bottom:.9rem">
       <div style="display:flex;justify-content:space-between;align-items:center${kOn?';margin-bottom:12px':''}">
@@ -1579,7 +1743,7 @@ function renderPost(c){
     if(streak.type==='LOSS'&&streak.count>=LOSS_STREAK_LIMIT)return toast('🚨 Loss streak! Pumzika kwanza!','err');
     const name=el('post-name')?.value||`Mkeka ${mikeka.length+1}`;
     const date=el('post-date')?.value||today();
-    const stake=parseInt(el('post-stake')?.value||5000);
+    const stake=parseInt(el('post-stake')?.value||currentUser.default_stake||5000);
     const ana=el('post-ana')?.value||'';
     const tOdds=pMatches.reduce((p,m)=>p*(parseFloat(m.odds)||1),1);
     const potRet=Math.round(tOdds*stake);
@@ -1778,7 +1942,7 @@ async function renderAdmin(c){
       <div style="font-size:11px;color:var(--muted);margin-top:8px">Pata key bure: <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent)">openrouter.ai/keys</a> (inaanza na sk-or-v1-...)</div>
     </div>`;
   window._role=async(uid,role)=>{await sb.from('users').update({role}).eq('id',uid);toast(`Role → ${ROLES[role]}`);};
-  window._saveGemini=()=>{GEMINI_KEY=el('gemini-key')?.value||'';localStorage.setItem('njem_or_key',GEMINI_KEY);localStorage.removeItem('njem_gemini_key');toast(GEMINI_KEY?'✅ Gemini key imehifadhiwa! Inafanya kazi sasa.':'Key ni empty','warn');renderAdmin(c);};
+  window._saveGemini=()=>{GEMINI_KEY=el('gemini-key')?.value||'';localStorage.setItem('njem_or_key',GEMINI_KEY);localStorage.removeItem('njem_gemini_key');toast(GEMINI_KEY?'✅ OpenRouter key imehifadhiwa! Inafanya kazi sasa.':'Key ni empty','warn');renderAdmin(c);};
 }
 
 // ═══════════════════════════════════════
