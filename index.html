@@ -2041,14 +2041,7 @@ window._aiAnalysis = (teams, mid) => {
 };
 
 // BOOT
-showAuth('login');
-
-// Live scores
-loadLiveScores();
-
-setInterval(() => {
-  loadLiveScores();
-}, 60000);
+checkSavedSession();
 
 // Service Worker
 if ('serviceWorker' in navigator) {
