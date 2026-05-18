@@ -2040,14 +2040,20 @@ window._aiAnalysis = (teams, mid) => {
   showAIAnalysis(teamsStr);
 };
 
-// BOOT — Check saved session first
-checkSavedSession();
-  loadLiveScores();
+// BOOT
+showAuth('login');
 
-setInterval(()=>{
+// Live scores
+loadLiveScores();
+
+setInterval(() => {
   loadLiveScores();
-},60000);
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
+}, 60000);
+
+// Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>
