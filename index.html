@@ -83,6 +83,13 @@
 <div id="toast-container"></div>
 <div id="auth-screen" style="display:none"></div>
 <div id="app" style="display:none"></div>
+<!-- Loading screen shown while checking saved session -->
+<div id="loading-screen" style="min-height:100vh;background:#05110a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'DM Sans',sans-serif">
+  <div style="width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,#00ff85,#00c965);display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:1rem;box-shadow:0 0 30px #00ff8544">📊</div>
+  <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#00ff85;letter-spacing:-0.5px">NJEM Tipps</div>
+  <div style="font-size:12px;color:#4a7a5a;margin-top:6px">Inaingia...</div>
+  <div style="margin-top:1.5rem;width:32px;height:32px;border:3px solid #1a3522;border-top:3px solid #00ff85;border-radius:50%;animation:spin .7s linear infinite"></div>
+</div>
 <script type="module">
 import{createClient}from'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 const SUPA_URL='https://mhmcvvfoylbnwqfwioys.supabase.co';
@@ -99,31 +106,61 @@ const SPORTSDB_KEY = '447279'; // Free tier key
 
 // Map our league IDs to TheSportsDB league IDs
 const LEAGUE_MAP = {
-  'epl':         '4328', // English Premier League
-  'laliga':      '4335', // La Liga
-  'bundesliga':  '4331', // Bundesliga
-  'seriea':      '4332', // Serie A
-  'ligue1':      '4334', // Ligue 1
-  'ucl':         '4480', // UEFA Champions League
-  'uel':         '4481', // UEFA Europa League
-  'uecl':        '4882', // Conference League
-  'eredivisie':  '4337', // Eredivisie
-  'primeira':    '4344', // Primeira Liga
-  'superlig':    '4342', // Turkish Süper Lig
-  'championship':'4329', // Championship
-  'scottish':    '4330', // Scottish Premiership
-  'mls':         '4346', // MLS
-  'brasileirao': '4351', // Brasileirao
-  'liga_mx':     '4350', // Liga MX
-  'argentina':   '4406', // Liga Argentina
-  'tpl':         '4637', // Tanzania PL
-  'kpl':         '4391', // Kenya PL
-  'psl':         '4322', // South Africa PSL
-  'egypt':       '4354', // Egyptian PL
-  'ghana':       '4395', // Ghana PL
-  'jleague':     '4356', // J-League
-  'kleague':     '4343', // K-League
-  'saudi':       '4349', // Saudi Pro League
+  // EUROPE
+  'epl':          '4328',
+  'laliga':       '4335',
+  'bundesliga':   '4331',
+  'seriea':       '4332',
+  'ligue1':       '4334',
+  'ucl':          '4480',
+  'uel':          '4481',
+  'uecl':         '4882',
+  'eredivisie':   '4337',
+  'primeira':     '4344',
+  'jupiler':      '4367',
+  'superlig':     '4342',
+  'championship': '4329',
+  'scottish':     '4330',
+  'swiss':        '4355',
+  'austrian':     '4364',
+  'greek':        '4366',
+  'danish':       '4368',
+  'swedish':      '4345',
+  'norwegian':    '4346',
+  'czech':        '4360',
+  'romanian':     '4359',
+  'croatian':     '4362',
+  'serbian':      '4363',
+  'rpl':          '4361',
+  'ekstraklasa':  '4365',
+  // AFRICA
+  'tpl':          '4637',
+  'kpl':          '4391',
+  'npfl':         '4388',
+  'psl':          '4322',
+  'egypt':        '4354',
+  'caf':          '4483',
+  'ghana':        '4395',
+  'uganda':       '4396',
+  'rwanda':       '4397',
+  'zambia':       '4398',
+  'morocco':      '4399',
+  'ethiopia':     '4400',
+  // AMERICAS
+  'mls':          '4346',
+  'brasileirao':  '4351',
+  'liga_mx':      '4350',
+  'argentina':    '4406',
+  'colombia':     '4407',
+  'chile':        '4408',
+  // ASIA
+  'jleague':      '4356',
+  'kleague':      '4343',
+  'csl':          '4357',
+  'isl':          '4410',
+  'saudi':        '4349',
+  'uae':          '4411',
+  'qatar':        '4412',
 };
 
 let liveScores = {}; // { "Team A vs Team B": { home: 1, away: 0, minute: 67, status: "live" } }
@@ -134,45 +171,50 @@ let liveEnabled = false;
 async function fetchLiveScores() {
   try {
     const today = new Date().toISOString().split('T')[0];
-    // Get all live events
     const res = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsday.php?d=${today}&s=Soccer`);
     if (!res.ok) return;
     const data = await res.json();
     const events = data.events || [];
-    
-    // Build scores map
     const newScores = {};
     events.forEach(ev => {
       if (!ev.strHomeTeam || !ev.strAwayTeam) return;
       const key1 = `${ev.strHomeTeam} vs ${ev.strAwayTeam}`.toLowerCase();
       const key2 = `${ev.strAwayTeam} vs ${ev.strHomeTeam}`.toLowerCase();
+      // Parse minute from strProgress e.g "45'" or "67'"
+      let minute = '';
+      let minuteNum = 0;
+      if (ev.strProgress) {
+        minute = ev.strProgress.replace("'","") + "'";
+        minuteNum = parseInt(ev.strProgress) || 0;
+      }
+      const isLive = ['1H','2H','HT','ET','LIVE'].includes(ev.strStatus);
+      const isFinished = ['FT','AET','PEN','FT_PEN'].includes(ev.strStatus);
       const scoreData = {
-        home: ev.intHomeScore || 0,
-        away: ev.intAwayScore || 0,
+        home: ev.intHomeScore !== null ? parseInt(ev.intHomeScore) : '-',
+        away: ev.intAwayScore !== null ? parseInt(ev.intAwayScore) : '-',
         homeTeam: ev.strHomeTeam,
         awayTeam: ev.strAwayTeam,
-        minute: ev.strProgress || '',
-        status: ev.strStatus || '',
+        minute, minuteNum,
+        status: ev.strStatus || 'NS',
         league: ev.strLeague || '',
+        leagueBadge: ev.strLeagueBadge || '',
         eventId: ev.idEvent,
-        // Determine match status
-        isLive: ev.strStatus === '1H' || ev.strStatus === '2H' || ev.strStatus === 'HT' || ev.strStatus === 'ET',
-        isFinished: ev.strStatus === 'FT' || ev.strStatus === 'AET' || ev.strStatus === 'PEN',
-        isUpcoming: ev.strStatus === 'NS' || ev.strStatus === '' || ev.strStatus === null,
+        thumb: ev.strThumb || '',
+        venue: ev.strVenue || '',
+        time: ev.strTime || '',
+        date: ev.dateEvent || '',
+        isLive, isFinished,
+        isUpcoming: !isLive && !isFinished,
+        homeForm: ev.strHomeFormGuide || '',
+        awayForm: ev.strAwayFormGuide || '',
       };
       newScores[key1] = scoreData;
       newScores[key2] = scoreData;
     });
-    
     liveScores = newScores;
-    
-    // Auto-settle finished matches
     await autoSettleMatches();
-    
-    // Update UI if on results or mikeka tab
-    if (currentTab === 'results' || currentTab === 'mikeka' || currentTab === 'home') {
-      refreshLiveUI();
-    }
+    if (['results','mikeka','home'].includes(currentTab)) refreshLiveUI();
+    if (currentTab === 'home') renderLiveSection();
   } catch(e) {
     console.log('Live scores fetch error:', e.message);
   }
@@ -341,6 +383,482 @@ function refreshLiveUI() {
   });
 }
 
+
+
+// ═══════════════════════════════════════
+// AI BETSLIP DEEP ANALYSIS
+// ═══════════════════════════════════════
+async function fetchTeamForm(teamName) {
+  try {
+    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/searchteams.php?t=${encodeURIComponent(teamName)}`);
+    const data = await res.json();
+    const team = (data.teams||[])[0];
+    if (!team) return null;
+    // Get last 5 events
+    const res2 = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventslast.php?id=${team.idTeam}`);
+    const data2 = await res2.json();
+    return { team, events: (data2.results||[]).slice(0,5) };
+  } catch(e) { return null; }
+}
+
+async function fetchH2H(homeTeam, awayTeam) {
+  try {
+    // Search both teams
+    const [homeData, awayData] = await Promise.all([
+      fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/searchteams.php?t=${encodeURIComponent(homeTeam)}`).then(r=>r.json()),
+      fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/searchteams.php?t=${encodeURIComponent(awayTeam)}`).then(r=>r.json()),
+    ]);
+    const homeId = (homeData.teams||[])[0]?.idTeam;
+    const awayId = (awayData.teams||[])[0]?.idTeam;
+    if (!homeId || !awayId) return [];
+    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsh2h.php?idHomeTeam=${homeId}&idAwayTeam=${awayId}`);
+    const data = await res.json();
+    return (data.results||[]).slice(0,5);
+  } catch(e) { return []; }
+}
+
+function analyzeForm(events, teamName) {
+  if (!events || !events.length) return { wins:0, draws:0, losses:0, goalsFor:0, goalsAgainst:0, form:[] };
+  let wins=0, draws=0, losses=0, goalsFor=0, goalsAgainst=0, form=[];
+  events.forEach(ev => {
+    const isHome = ev.strHomeTeam?.toLowerCase().includes(teamName.toLowerCase().split(' ')[0]);
+    const hg = parseInt(ev.intHomeScore)||0;
+    const ag = parseInt(ev.intAwayScore)||0;
+    const gf = isHome ? hg : ag;
+    const ga = isHome ? ag : hg;
+    goalsFor += gf; goalsAgainst += ga;
+    if (gf > ga) { wins++; form.push('W'); }
+    else if (gf === ga) { draws++; form.push('D'); }
+    else { losses++; form.push('L'); }
+  });
+  return { wins, draws, losses, goalsFor, goalsAgainst, form };
+}
+
+function analyzeH2H(h2hEvents, homeTeam) {
+  if (!h2hEvents || !h2hEvents.length) return null;
+  let homeWins=0, awayWins=0, draws=0, totalGoals=0;
+  h2hEvents.forEach(ev => {
+    const hg = parseInt(ev.intHomeScore)||0;
+    const ag = parseInt(ev.intAwayScore)||0;
+    totalGoals += hg + ag;
+    const isHome = ev.strHomeTeam?.toLowerCase().includes(homeTeam.toLowerCase().split(' ')[0]);
+    if (hg > ag) isHome ? homeWins++ : awayWins++;
+    else if (hg < ag) isHome ? awayWins++ : homeWins++;
+    else draws++;
+  });
+  return {
+    homeWins, awayWins, draws,
+    avgGoals: (totalGoals / h2hEvents.length).toFixed(1),
+    total: h2hEvents.length
+  };
+}
+
+// Show AI Analysis Modal for a match
+async function showAIAnalysis(teamsStr) {
+  const parts = teamsStr.split(' vs ');
+  if (parts.length !== 2) return toast('Jaza timu kwanza (Timu A vs Timu B)', 'warn');
+  const homeTeam = parts[0].trim();
+  const awayTeam = parts[1].trim();
+
+  // Create modal
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.id = 'ai-modal';
+  ov.innerHTML = `
+    <div class="modal-box" style="max-height:88vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800">🤖 AI Analysis</div>
+          <div style="font-size:11px;color:var(--muted)">${homeTeam} vs ${awayTeam}</div>
+        </div>
+        <button onclick="document.getElementById('ai-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">×</button>
+      </div>
+      <div id="ai-content">
+        <div style="text-align:center;padding:2rem;color:var(--muted)">
+          <div class="spinner" style="margin:0 auto 1rem"></div>
+          <div style="font-size:13px">🤖 AI inachambua mechi...</div>
+          <div style="font-size:11px;margin-top:4px">Form · H2H · Statistics</div>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.onclick = (e) => { if(e.target===ov) ov.remove(); };
+
+  const dc = document.getElementById('ai-content');
+
+  try {
+    // Fetch data in parallel
+    const [homeFormData, awayFormData, h2hData] = await Promise.all([
+      fetchTeamForm(homeTeam),
+      fetchTeamForm(awayTeam),
+      fetchH2H(homeTeam, awayTeam),
+    ]);
+
+    const homeStats = analyzeForm(homeFormData?.events || [], homeTeam);
+    const awayStats = analyzeForm(awayFormData?.events || [], awayTeam);
+    const h2h = analyzeH2H(h2hData, homeTeam);
+
+    // Generate AI recommendations
+    const recs = generateAIRecommendations(homeTeam, awayTeam, homeStats, awayStats, h2h);
+
+    dc.innerHTML = `
+      <!-- Form Comparison -->
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:10px">📈 Form ya Hivi Karibuni (Mechi 5)</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem">
+        ${formCard(homeTeam, homeStats)}
+        ${formCard(awayTeam, awayStats)}
+      </div>
+
+      <!-- H2H -->
+      ${h2h ? `
+        <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:10px">⚔️ Head to Head (Mechi ${h2h.total})</div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1rem;margin-bottom:1rem">
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;text-align:center;gap:.5rem;margin-bottom:10px">
+            <div>
+              <div style="font-size:22px;font-weight:800;color:var(--win)">${h2h.homeWins}</div>
+              <div style="font-size:10px;color:var(--muted)">${homeTeam} Wins</div>
+            </div>
+            <div>
+              <div style="font-size:22px;font-weight:800;color:var(--warn)">${h2h.draws}</div>
+              <div style="font-size:10px;color:var(--muted)">Sare</div>
+            </div>
+            <div>
+              <div style="font-size:22px;font-weight:800;color:var(--loss)">${h2h.awayWins}</div>
+              <div style="font-size:10px;color:var(--muted)">${awayTeam} Wins</div>
+            </div>
+          </div>
+          <div style="text-align:center;font-size:12px;color:var(--muted)">
+            Avg Magoli kwa Mechi: <strong style="color:var(--accent)">${h2h.avgGoals}</strong>
+          </div>
+        </div>
+      ` : '<div style="font-size:11px;color:var(--muted);margin-bottom:1rem">H2H data haipatikani kwa timu hizi</div>'}
+
+      <!-- AI Recommendations -->
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:10px">🎯 AI Mapendekezo Bora</div>
+      ${recs.map(r => `
+        <div style="background:${r.type==='best'?'rgba(0,255,133,.08)':'rgba(255,170,0,.06)'};border:1px solid ${r.type==='best'?'rgba(0,255,133,.3)':'rgba(255,170,0,.2)'};border-radius:12px;padding:.85rem;margin-bottom:.6rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <div style="font-size:13px;font-weight:700;color:${r.type==='best'?'var(--win)':'var(--warn)'}">
+              ${r.icon} ${r.market}
+            </div>
+            <div style="background:${r.type==='best'?'rgba(0,255,133,.2)':'rgba(255,170,0,.2)'};color:${r.type==='best'?'var(--win)':'var(--warn)'};padding:.2rem .6rem;border-radius:20px;font-size:11px;font-weight:700">
+              ${r.confidence}% confidence
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--muted)">${r.reason}</div>
+        </div>`).join('')}
+
+      <!-- Disclaimer -->
+      <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:1rem;padding:.75rem;background:rgba(0,0,0,.2);border-radius:10px">
+        ⚠️ AI analysis inategemea data iliyopo. Sio guarantee ya matokeo. Weka kwa akili.
+      </div>
+    `;
+  } catch(e) {
+    dc.innerHTML = `<div style="text-align:center;color:var(--muted);padding:2rem">
+      <div style="font-size:32px">⚠️</div>
+      <div style="margin-top:8px;font-size:13px">Data haipatikani kwa timu hizi</div>
+      <div style="font-size:11px;margin-top:4px">Hakikisha jina la timu ni sahihi</div>
+    </div>`;
+  }
+}
+
+function formCard(teamName, stats) {
+  const winRate = stats.wins + stats.draws + stats.losses > 0
+    ? Math.round((stats.wins / (stats.wins + stats.draws + stats.losses)) * 100)
+    : 0;
+  return `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.75rem;text-align:center">
+      <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${teamName}</div>
+      <div style="display:flex;justify-content:center;gap:4px;margin-bottom:8px">
+        ${stats.form.map(f => `<span style="width:20px;height:20px;border-radius:50%;background:${f==='W'?'var(--win)':f==='L'?'var(--loss)':'var(--warn)'};color:#000;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">${f}</span>`).join('')}
+        ${!stats.form.length ? '<span style="font-size:11px;color:var(--muted)">Hakuna data</span>' : ''}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;font-size:10px">
+        <div><div style="color:var(--win);font-weight:700">${stats.wins}W</div></div>
+        <div><div style="color:var(--warn);font-weight:700">${stats.draws}D</div></div>
+        <div><div style="color:var(--loss);font-weight:700">${stats.losses}L</div></div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px">
+        GF: ${stats.goalsFor} | GA: ${stats.goalsAgainst}
+      </div>
+    </div>`;
+}
+
+function generateAIRecommendations(homeTeam, awayTeam, homeStats, awayStats, h2h) {
+  const recs = [];
+  const totalHomeGoals = homeStats.goalsFor + homeStats.goalsAgainst;
+  const totalAwayGoals = awayStats.goalsFor + awayStats.goalsAgainst;
+  const avgTotalGoals = homeStats.form.length ? (totalHomeGoals / homeStats.form.length) : 0;
+  const avgAwayGoals = awayStats.form.length ? (totalAwayGoals / awayStats.form.length) : 0;
+  const avgGoals = (avgTotalGoals + avgAwayGoals) / 2;
+  const h2hAvgGoals = h2h ? parseFloat(h2h.avgGoals) : 0;
+
+  // Over/Under recommendation
+  const goalAvg = h2h ? (h2hAvgGoals + avgGoals) / 2 : avgGoals;
+  if (goalAvg > 2.5) {
+    recs.push({
+      icon: '⚽',
+      market: `Over 2.5 Goals`,
+      pick: 'Over 2.5',
+      confidence: Math.min(Math.round(55 + (goalAvg - 2.5) * 10), 78),
+      reason: `Wastani wa magoli ${goalAvg.toFixed(1)} kwa mechi. ${h2h ? `H2H avg ${h2hAvgGoals} magoli.` : ''}`,
+      type: goalAvg > 3 ? 'best' : 'ok'
+    });
+  } else {
+    recs.push({
+      icon: '🔒',
+      market: `Under 2.5 Goals`,
+      pick: 'Under 2.5',
+      confidence: Math.min(Math.round(55 + (2.5 - goalAvg) * 8), 72),
+      reason: `Mechi za hivi karibuni zina magoli machache. Avg ${goalAvg.toFixed(1)}.`,
+      type: goalAvg < 1.8 ? 'best' : 'ok'
+    });
+  }
+
+  // 1X2 / Double Chance recommendation
+  const homeWinRate = homeStats.form.length ? homeStats.wins / homeStats.form.length : 0;
+  const awayWinRate = awayStats.form.length ? awayStats.wins / awayStats.form.length : 0;
+  const h2hHomeDominance = h2h ? h2h.homeWins / h2h.total : 0.5;
+
+  if (homeWinRate > 0.6 && h2hHomeDominance > 0.4) {
+    recs.push({
+      icon: '🏠',
+      market: 'Double Chance 1X',
+      pick: '1X',
+      confidence: Math.min(Math.round(55 + homeWinRate * 20), 75),
+      reason: `${homeTeam} wameshinda ${Math.round(homeWinRate*100)}% ya mechi zao za hivi karibuni. H2H wanaongoza ${h2h?h2h.homeWins:0}/${h2h?h2h.total:0}.`,
+      type: homeWinRate > 0.7 ? 'best' : 'ok'
+    });
+  } else if (awayWinRate > 0.6) {
+    recs.push({
+      icon: '✈️',
+      market: 'Double Chance X2',
+      pick: 'X2',
+      confidence: Math.min(Math.round(52 + awayWinRate * 18), 72),
+      reason: `${awayTeam} wana form nzuri — wameshinda ${Math.round(awayWinRate*100)}% ya mechi zao.`,
+      type: awayWinRate > 0.7 ? 'best' : 'ok'
+    });
+  } else {
+    recs.push({
+      icon: '⚖️',
+      market: 'Double Chance 1X',
+      pick: '1X',
+      confidence: 55,
+      reason: 'Mechi usawa — Double Chance ni salama zaidi kuliko 1X2 moja kwa moja.',
+      type: 'ok'
+    });
+  }
+
+  // BTTS recommendation
+  const homeScoredIn = homeStats.goalsFor > 0;
+  const awayScoredIn = awayStats.goalsFor > 0;
+  const homeConcedeRate = homeStats.form.length ? homeStats.goalsAgainst / homeStats.form.length : 1;
+  const awayConcedeRate = awayStats.form.length ? awayStats.goalsAgainst / awayStats.form.length : 1;
+
+  if (homeConcedeRate > 0.8 && awayConcedeRate > 0.8) {
+    recs.push({
+      icon: '🎯',
+      market: 'BTTS - Yes',
+      pick: 'BTTS Yes',
+      confidence: Math.min(Math.round(55 + (homeConcedeRate + awayConcedeRate) * 5), 73),
+      reason: `${homeTeam} wapoteza avg ${homeConcedeRate.toFixed(1)} kwa mechi. ${awayTeam} avg ${awayConcedeRate.toFixed(1)}. Pande zote zinaweza kuscore.`,
+      type: homeConcedeRate > 1 && awayConcedeRate > 1 ? 'best' : 'ok'
+    });
+  }
+
+  // Sort by confidence
+  recs.sort((a, b) => b.confidence - a.confidence);
+  return recs.slice(0, 4);
+}
+
+// Match Details Modal — Live Stats
+async function showMatchDetailsModal(teamsStr, eventId) {
+  // Create modal
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.id = 'match-modal';
+  ov.innerHTML = `
+    <div class="modal-box" style="max-height:85vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+        <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800">📊 Match Details</div>
+        <button onclick="document.getElementById('match-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">×</button>
+      </div>
+      <div id="match-details-content"><div class="center"><div class="spinner"></div></div></div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.onclick = (e) => { if(e.target===ov) ov.remove(); };
+
+  const score = findScore(teamsStr);
+  const dc = document.getElementById('match-details-content');
+  if (!dc) return;
+
+  // Fetch event details from TheSportsDB
+  try {
+    let eventData = null;
+    let timeline = [];
+
+    if (eventId) {
+      // Fetch event details
+      const res = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/lookupevent.php?id=${eventId}`);
+      const data = await res.json();
+      eventData = (data.events || [])[0];
+
+      // Fetch event timeline/stats
+      const res2 = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventstatistics.php?id=${eventId}`);
+      const data2 = await res2.json();
+      timeline = data2.eventstats || [];
+    }
+
+    const s = score || {};
+    const home = s.homeTeam || teamsStr.split(' vs ')[0];
+    const away = s.awayTeam || teamsStr.split(' vs ')[1];
+
+    // Parse stats from eventData
+    const stats = {
+      possession_home: eventData?.intHomeShots ? Math.round(50 + (parseInt(eventData.intHomeShots||5) - parseInt(eventData.intAwayShots||5))*2) : 50,
+      possession_away: 0,
+      shots_home: eventData?.intHomeShots || '—',
+      shots_away: eventData?.intAwayShots || '—',
+      shots_on_home: eventData?.intHomeShotsOnTarget || '—',
+      shots_on_away: eventData?.intAwayShotsOnTarget || '—',
+      fouls_home: eventData?.intHomeFouls || '—',
+      fouls_away: eventData?.intAwayFouls || '—',
+      corners_home: eventData?.intHomeCorners || '—',
+      corners_away: eventData?.intAwayCorners || '—',
+      cards_home: (parseInt(eventData?.intHomeYellowCards||0) + parseInt(eventData?.intHomeRedCards||0)*2),
+      cards_away: (parseInt(eventData?.intAwayYellowCards||0) + parseInt(eventData?.intAwayRedCards||0)*2),
+      yellow_home: eventData?.intHomeYellowCards || 0,
+      yellow_away: eventData?.intAwayYellowCards || 0,
+      red_home: eventData?.intHomeRedCards || 0,
+      red_away: eventData?.intAwayRedCards || 0,
+    };
+    stats.possession_away = 100 - stats.possession_home;
+
+    const statusColor = s.isLive ? 'var(--danger)' : s.isFinished ? 'var(--muted)' : 'var(--warn)';
+    const statusText = s.isLive ? `🔴 LIVE ${s.minute||''}` : s.isFinished ? 'FT' : `🕐 ${s.time||''}`;
+
+    dc.innerHTML = `
+      <!-- Score Header -->
+      <div style="text-align:center;background:linear-gradient(135deg,#0f3520,#092518);border-radius:16px;padding:1.25rem;margin-bottom:1rem">
+        <div style="font-size:11px;color:${statusColor};font-weight:700;margin-bottom:8px">${statusText}</div>
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.5rem">
+          <div style="text-align:right">
+            <div style="font-size:13px;font-weight:700">${home}</div>
+            ${s.homeForm ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${formatForm(s.homeForm)}</div>` : ''}
+          </div>
+          <div style="font-size:34px;font-weight:800;color:${s.isLive?'var(--danger)':'var(--text)'};letter-spacing:4px;text-align:center">
+            ${s.home !== undefined ? s.home : '-'} - ${s.away !== undefined ? s.away : '-'}
+          </div>
+          <div style="text-align:left">
+            <div style="font-size:13px;font-weight:700">${away}</div>
+            ${s.awayForm ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${formatForm(s.awayForm)}</div>` : ''}
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:8px">${s.league||''} ${s.venue?'· '+s.venue:''}</div>
+      </div>
+
+      <!-- Live Stats -->
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:10px">📊 Match Statistics</div>
+
+      ${statRow('Possession', stats.possession_home+'%', stats.possession_away+'%', stats.possession_home)}
+      ${statRow('Shots', stats.shots_home, stats.shots_away, typeof stats.shots_home==='number'?Math.round(stats.shots_home/(parseInt(stats.shots_home)||1+parseInt(stats.shots_away)||1)*100):50)}
+      ${statRow('Shots on Target', stats.shots_on_home, stats.shots_on_away, 50)}
+      ${statRow('Corners', stats.corners_home, stats.corners_away, 50)}
+      ${statRow('Fouls', stats.fouls_home, stats.fouls_away, 50)}
+
+      <!-- Cards -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.75rem;text-align:center">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">${home}</div>
+          <div style="display:flex;gap:8px;justify-content:center">
+            ${parseInt(stats.yellow_home)>0?`<span style="background:#ffcc00;color:#000;padding:.2rem .5rem;border-radius:4px;font-size:11px;font-weight:700">🟨 ${stats.yellow_home}</span>`:''}
+            ${parseInt(stats.red_home)>0?`<span style="background:var(--danger);color:#fff;padding:.2rem .5rem;border-radius:4px;font-size:11px;font-weight:700">🟥 ${stats.red_home}</span>`:''}
+            ${parseInt(stats.yellow_home)===0&&parseInt(stats.red_home)===0?'<span style="color:var(--muted);font-size:12px">—</span>':''}
+          </div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.75rem;text-align:center">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">${away}</div>
+          <div style="display:flex;gap:8px;justify-content:center">
+            ${parseInt(stats.yellow_away)>0?`<span style="background:#ffcc00;color:#000;padding:.2rem .5rem;border-radius:4px;font-size:11px;font-weight:700">🟨 ${stats.yellow_away}</span>`:''}
+            ${parseInt(stats.red_away)>0?`<span style="background:var(--danger);color:#fff;padding:.2rem .5rem;border-radius:4px;font-size:11px;font-weight:700">🟥 ${stats.red_away}</span>`:''}
+            ${parseInt(stats.yellow_away)===0&&parseInt(stats.red_away)===0?'<span style="color:var(--muted);font-size:12px">—</span>':''}
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Recommendation for this match -->
+      <div style="margin-top:1rem;background:rgba(0,255,133,.06);border:1px solid rgba(0,255,133,.2);border-radius:14px;padding:1rem">
+        <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px">🤖 AI Mapendekezo</div>
+        ${generateMatchAI(s, stats)}
+      </div>
+    `;
+  } catch(e) {
+    dc.innerHTML = `<div style="text-align:center;color:var(--muted);padding:2rem">
+      <div style="font-size:32px">⚽</div>
+      <div style="margin-top:8px">${teamsStr}</div>
+      <div style="font-size:12px;margin-top:4px">Detailed stats hazipo kwa mechi hii</div>
+    </div>`;
+  }
+}
+
+function statRow(label, homeVal, awayVal, homePct) {
+  const pct = typeof homePct === 'number' ? Math.min(Math.max(homePct, 5), 95) : 50;
+  return `
+    <div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+        <span style="font-weight:600;color:var(--accent)">${homeVal}</span>
+        <span style="color:var(--muted);font-size:11px">${label}</span>
+        <span style="font-weight:600;color:var(--text)">${awayVal}</span>
+      </div>
+      <div style="background:rgba(0,0,0,.4);border-radius:20px;height:6px;overflow:hidden;display:flex">
+        <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:20px;transition:width .8s"></div>
+      </div>
+    </div>`;
+}
+
+function formatForm(formStr) {
+  if (!formStr) return '';
+  return formStr.split('').map(c => {
+    const col = c==='W'?'var(--win)':c==='L'?'var(--loss)':'var(--warn)';
+    return `<span style="color:${col};font-weight:700;font-size:11px">${c}</span>`;
+  }).join(' ');
+}
+
+function generateMatchAI(score, stats) {
+  const tips = [];
+  const home = score.homeTeam || 'Home';
+  const away = score.awayTeam || 'Away';
+  const h = parseInt(score.home) || 0;
+  const a = parseInt(score.away) || 0;
+  const total = h + a;
+  const min = score.minuteNum || 0;
+
+  if (score.isLive) {
+    // Live recommendations
+    if (total === 0 && min > 60) tips.push({icon:'💡',msg:`${min}+ dakika bila goli — Over 0.5 inaweza kuwa risky`});
+    if (total >= 2 && min < 70) tips.push({icon:'🔥',msg:`Magoli ${total} tayari — Over ${total}.5 inawezekana kabla FT`});
+    if (h > a + 1) tips.push({icon:'💰',msg:`${home} wanaongoza kwa ${h}-${a} — Fikiria cashout sasa`});
+    if (a > h + 1) tips.push({icon:'💰',msg:`${away} wanaongoza kwa ${a}-${h} — Fikiria cashout sasa`});
+    if (parseInt(stats.red_home) > 0) tips.push({icon:'🟥',msg:`${home} wana mchezaji nje — ${away} wana advantage`});
+    if (parseInt(stats.red_away) > 0) tips.push({icon:'🟥',msg:`${away} wana mchezaji nje — ${home} wana advantage`});
+    if (h === a && min > 75) tips.push({icon:'⚡',msg:`Sare ${h}-${a} dakika ${min} — Bonyeza kwa ${home} au ${away} kwa late goal`});
+  } else if (score.isFinished) {
+    tips.push({icon:'📊',msg:`Matokeo: ${home} ${h} - ${a} ${away}`});
+    if (total > 3) tips.push({icon:'📈',msg:`Magoli ${total} — Over 2.5 ingelifaa kwenye mechi hii`});
+    if (total < 2) tips.push({icon:'📉',msg:`Magoli ${total} tu — Under 2.5 ingelifaa`});
+  } else {
+    tips.push({icon:'⏳',msg:`Mechi hii bado haijachezwa — subiri kwa data zaidi`});
+  }
+
+  if (!tips.length) tips.push({icon:'📊',msg:'Data ya kutosha haipatikani kwa mapendekezo'});
+
+  return tips.map(t => `
+    <div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start">
+      <span style="font-size:14px">${t.icon}</span>
+      <span style="font-size:12px;color:#5a9e70">${t.msg}</span>
+    </div>`).join('');
+}
+
 // Start/stop live polling
 function startLiveScores() {
   if (liveInterval) return;
@@ -449,6 +967,7 @@ function toast(msg,type='ok'){
 
 // AUTH
 function showAuth(mode='login'){
+  const ls=el('loading-screen');if(ls)ls.style.display='none';
   el('app').style.display='none';el('auth-screen').style.display='flex';
   let sentOTP=null,pendingData=null;
   const render=(m)=>{
@@ -538,11 +1057,13 @@ function showAuth(mode='login'){
 }
 
 async function loginUser(user){
+  const ls=el('loading-screen');if(ls)ls.style.display='none';
   currentUser=user;
+  // Save session to localStorage — inabaki hata ukifunga app
+  localStorage.setItem('njem_session', JSON.stringify(user));
   el('auth-screen').style.display='none';el('app').style.display='block';
   await loadData();startRealtime();renderShell();showTab('home');
-  startLiveScores(); // Start live scores polling
-  // Request notification permission
+  startLiveScores();
   if('Notification' in window && Notification.permission==='default'){
     Notification.requestPermission();
   }
@@ -550,12 +1071,17 @@ async function loginUser(user){
 function logout(){
   if(realtimeChannel)sb.removeChannel(realtimeChannel);
   stopLiveScores();
+  localStorage.removeItem('njem_session');
   currentUser=null;mikeka=[];allMikeka=[];
   el('app').style.display='none';showAuth('login');
 }
 async function updateUser(updates){
   const{data}=await sb.from('users').update(updates).eq('id',currentUser.id).select().single();
-  if(data){currentUser=data;const c=el('bankroll-val');if(c)c.textContent='💰 '+fmt(data.bankroll);}
+  if(data){
+    currentUser=data;
+    localStorage.setItem('njem_session', JSON.stringify(data));
+    const c=el('bankroll-val');if(c)c.textContent='💰 '+fmt(data.bankroll);
+  }
 }
 async function loadData(){
   const{data:my}=await sb.from('mikeka').select('*,matches(*)').eq('user_id',currentUser.id).order('created_at',{ascending:false});
@@ -826,17 +1352,28 @@ function renderLiveSection() {
   sec.innerHTML = `
     <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px;display:flex;align-items:center;gap:6px">
       <span style="animation:pulse 1s infinite">🔴</span> Live Sasa Hivi (${unique.length})
+      <span style="margin-left:auto;font-size:10px;color:var(--muted);font-weight:400">Bonyeza mechi kwa details</span>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px">
-      ${unique.slice(0, 5).map(s => `
-        <div style="background:var(--surface);border:1px solid rgba(255,68,68,.3);border-radius:12px;padding:.75rem;display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div style="font-size:12px;font-weight:600">${s.homeTeam} vs ${s.awayTeam}</div>
-            <div style="font-size:10px;color:var(--muted)">${s.league} · ${s.minute||'Live'}</div>
+      ${unique.slice(0,8).map(s => `
+        <div onclick="window._showMatchDetails('${s.homeTeam.replace(/'/g,"\'")} vs ${s.awayTeam.replace(/'/g,"\'")}','${s.eventId}')"
+          style="background:var(--surface);border:1px solid ${s.isLive?'rgba(255,68,68,.4)':'rgba(26,53,34,.8)'};border-radius:12px;padding:.75rem;display:flex;justify-content:space-between;align-items:center;cursor:pointer;transition:border .2s">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:600">${s.homeTeam}</div>
+            <div style="font-size:10px;color:var(--muted);margin:2px 0">${s.league}</div>
+            <div style="font-size:12px;font-weight:600">${s.awayTeam}</div>
           </div>
-          <div style="text-align:center;background:rgba(255,68,68,.15);border-radius:10px;padding:.4rem .75rem">
-            <div style="font-size:18px;font-weight:800;color:var(--danger)">${s.home} - ${s.away}</div>
-            <div style="font-size:9px;color:var(--danger);animation:pulse 1s infinite">LIVE</div>
+          <div style="text-align:center;min-width:80px">
+            ${s.isLive ? `
+              <div style="font-size:22px;font-weight:800;color:var(--danger);letter-spacing:2px">${s.home} - ${s.away}</div>
+              <div style="font-size:10px;color:var(--danger);font-weight:700;animation:pulse 1s infinite">🔴 ${s.minute||'LIVE'}</div>
+            ` : s.isFinished ? `
+              <div style="font-size:22px;font-weight:800;color:var(--muted);letter-spacing:2px">${s.home} - ${s.away}</div>
+              <div style="font-size:10px;color:var(--muted)">FT</div>
+            ` : `
+              <div style="font-size:14px;font-weight:700;color:var(--text)">${s.time||'--:--'}</div>
+              <div style="font-size:10px;color:var(--muted)">Inakuja</div>
+            `}
           </div>
         </div>`).join('')}
     </div>
@@ -1065,7 +1602,10 @@ function mHTML(m,idx,regions){
       <div style="font-size:11px;font-weight:700;color:var(--accent)">Mechi ${idx+1}</div>
       ${idx>0?`<button onclick="window._delM('${m._id}')" style="background:none;border:none;color:var(--loss);cursor:pointer;font-size:18px;padding:0">×</button>`:''}
     </div>
-    <input class="inp-sm" data-mid="${m._id}" data-f="teams" placeholder="Timu A vs Timu B" value="${m.teams}" style="margin-bottom:6px"/>
+    <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
+      <input class="inp-sm" data-mid="${m._id}" data-f="teams" placeholder="Timu A vs Timu B" value="${m.teams}" style="flex:1"/>
+      ${m.teams && m.teams.includes(' vs ') ? `<button onclick="window._aiAnalysis('${m.teams.replace(/'/g,"\'")}','${m._id}')" style="padding:.4rem .6rem;border-radius:8px;border:1px solid rgba(0,255,133,.3);background:rgba(0,255,133,.08);color:var(--accent);font-size:11px;cursor:pointer;white-space:nowrap">🤖 AI</button>` : ''}
+    </div>
     <div class="grid-2" style="margin-bottom:6px">
       <select class="inp-sm" data-mid="${m._id}" data-f="league">
         ${regions.map(r=>`<optgroup label="${r}">${LEAGUES.filter(l=>l.region===r).map(l=>`<option value="${l.id}" ${m.league===l.id?'selected':''}>${l.flag} ${l.name}</option>`).join('')}</optgroup>`).join('')}
@@ -1241,8 +1781,41 @@ async function renderAdmin(c){
   window._saveGemini=()=>{GEMINI_KEY=el('gemini-key')?.value||'';localStorage.setItem('njem_or_key',GEMINI_KEY);localStorage.removeItem('njem_gemini_key');toast(GEMINI_KEY?'✅ Gemini key imehifadhiwa! Inafanya kazi sasa.':'Key ni empty','warn');renderAdmin(c);};
 }
 
-// BOOT
-showAuth('login');
+// ═══════════════════════════════════════
+// AUTO LOGIN — Check saved session
+// ═══════════════════════════════════════
+async function checkSavedSession() {
+  try {
+    const saved = localStorage.getItem('njem_session');
+    if (!saved) { showAuth('login'); return; }
+    const savedUser = JSON.parse(saved);
+    if (!savedUser || !savedUser.id) { showAuth('login'); return; }
+    // Verify user still exists in Supabase + get fresh data
+    const { data, error } = await sb.from('users').select('*').eq('id', savedUser.id).maybeSingle();
+    if (error || !data) {
+      localStorage.removeItem('njem_session');
+      showAuth('login');
+      return;
+    }
+    // Auto login with fresh data
+    await loginUser(data);
+  } catch(e) {
+    showAuth('login');
+  }
+}
+
+// Global handlers
+window._showMatchDetails = (teams, eventId) => showMatchDetailsModal(teams, eventId);
+window._aiAnalysis = (teams, mid) => {
+  readInps();
+  const match = pMatches.find(m => m._id === mid);
+  const teamsStr = match ? match.teams : teams;
+  if (!teamsStr || !teamsStr.includes(' vs ')) return toast('Jaza jina la timu kwanza!', 'warn');
+  showAIAnalysis(teamsStr);
+};
+
+// BOOT — Check saved session first
+checkSavedSession();
 if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 </script>
 </body>
