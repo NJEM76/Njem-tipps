@@ -13,8 +13,7 @@ const ROLES = { owner: '👑 Owner', analyst: '🔍 Analyst', viewer: '👁️ V
 
 // INITIALIZATION DIRECT VIA INTEGRATED KEYS
 document.addEventListener("DOMContentLoaded", () => {
-  
-  // Zile key ulizozipata zikiwa zimeunganishwa rasmi
+  // Zile key zako thabiti za Supabase zilizounganishwa rasmi
   const SUPABASE_URL = "https://mhmcvvfoylbnwqfwioys.supabase.co"; 
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1obWN2dmZveWxibndxZndpb3lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5Mzc3NDUsImV4cCI6MjA5NDUxMzc0NX0.DJx01EDheWCjpq2nkdK0aljTmf9irfTugPhn_fTXSWM";
   
@@ -56,7 +55,7 @@ function convertToTanzaniaTime(dateStr, timeStr) {
   }
 }
 
-// 2. LIVE SCORES FETCHING & MEMORY LEAK CONTROL
+// 2. LIVE SCORES FETCHING WITH DUPLICATE PROTECTION
 async function startLiveScores() {
   if (window.liveScoresInterval) {
     clearInterval(window.liveScoresInterval);
@@ -76,7 +75,7 @@ async function startLiveScores() {
 
         const key1 = `${ev.strHomeTeam.toLowerCase().trim()} vs ${ev.strAwayTeam.toLowerCase().trim()}`;
         
-        if (newScores[key1]) return;
+        if (newScores[key1]) return; // Ulinzi wa mechi kujirudia
 
         let minute = ev.strProgress ? ev.strProgress + "'" : ev.strStatus || 'NS';
         if (ev.strStatus === 'HT') minute = "HT";
@@ -98,12 +97,10 @@ async function startLiveScores() {
         };
       });
 
-      liveScores = null;
       liveScores = newScores;
-
       if (['home', 'mikeka'].includes(currentTab)) renderAppBody();
     } catch (e) {
-      console.warn('Live scores update safely bypassed:', e.message);
+      console.warn('Live scores bypass:', e.message);
     }
   };
 
@@ -111,7 +108,7 @@ async function startLiveScores() {
   window.liveScoresInterval = setInterval(fetchScores, 45000);
 }
 
-// 3. SECURE DATA PACKING & OFFLINE RESILIENCE
+// 3. DATA LOAD & BACKUP
 async function loadData() {
   try {
     if (!sb) return;
@@ -133,7 +130,6 @@ async function loadData() {
   }
 }
 
-// REST OF APPLICATION ENGINE
 function filterUserMikeka() {
   if (currentUser.role === 'owner' || currentUser.role === 'analyst') {
     mikeka = allMikeka;
@@ -142,6 +138,7 @@ function filterUserMikeka() {
   }
 }
 
+// 4. AUTHENTICATION ENGINE (URUDISHAJI WA REGISTRATION NA LOGIN)
 async function initApp() {
   const session = localStorage.getItem('njem_session');
   const ls = el('loading-screen');
@@ -159,39 +156,99 @@ async function initApp() {
   }
 }
 
+function loginUser(user) {
+  currentUser = user;
+  localStorage.setItem('njem_session', JSON.stringify(user));
+  el('auth-screen').style.display = 'none';
+  el('app').style.display = 'block';
+  loadData();
+  startLiveScores();
+  renderAppBody();
+  toast('Karibu kwenye NJEM-TIPPS! 🎉', 'success');
+}
+
 function showAuthForm(mode) {
   const f = el('auth-form');
-  if (mode === 'login') {
+  if (!f) return;
+
+  if (mode === 'register') {
     f.innerHTML = `
-      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;margin-bottom:12px">🔑 INGIA NJEM-TIPPS</div>
-      <input class="inp" id="l-phone" placeholder="Namba ya Simu" type="tel" style="margin-bottom:10px"/>
-      <input class="inp" id="l-pass" placeholder="Nenosiri" type="password" style="margin-bottom:14px"/>
-      <button class="btn-primary" id="l-btn">Ingia Kwenye Mfumo →</button>
+      <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:12px;color:var(--accent)">📝 JISAJILI HAPA</div>
+      <input class="inp" id="r-name" placeholder="Jina Kamili" type="text" style="margin-bottom:10px"/>
+      <input class="inp" id="r-phone" placeholder="Namba ya Simu (Mfano: 0764674285)" type="tel" style="margin-bottom:10px"/>
+      <input class="inp" id="r-pass" placeholder="Nenosiri (Password)" type="password" style="margin-bottom:14px"/>
+      <button class="btn-primary" id="r-btn" style="margin-bottom:12px">Thibitisha Usajili ✓</button>
+      <p style="text-align:center;font-size:13px;color:var(--muted)">Tayari una akaunti? <span id="go-log" style="color:var(--accent);cursor:pointer;font-weight:600">Ingia hapa</span></p>
     `;
-    el('l-btn').onclick = async () => {
-      const phone = el('l-phone').value.trim(), pass = el('l-pass').value;
-      if(!phone || !pass) return toast('Tafadhali jaza sehemu zote', 'err');
+    
+    el('go-log').onclick = () => showAuthForm('login');
+    
+    el('r-btn').onclick = async () => {
+      const name = el('r-name').value.trim();
+      const phone = el('r-phone').value.replace(/\D/g, '');
+      const pass = el('r-pass').value;
+
+      if (!name || !phone || !pass) return toast('Tafadhali jaza sehemu zote!', 'err');
       
-      // Real Database User Verification
+      const btn = el('r-btn');
+      btn.textContent = 'Inasajili...';
+      btn.disabled = true;
+
       try {
-        const cleanedPhone = phone.replace(/\D/g, '');
-        const { data, error } = await sb.from('users').select('*').eq('phone', cleanedPhone).single();
+        const { data, error } = await sb.from('users').insert([{
+          name, phone, role: 'viewer', bankroll: 0, password: pass
+        }]).select().single();
+
+        if (error) {
+          btn.textContent = 'Thibitisha Usajili ✓';
+          btn.disabled = false;
+          return toast('Hitilafu: Namba tayari imeshasajiliwa!', 'err');
+        }
+
+        toast('Akaunti imefunguliwa kwa mafanikio! 🎉');
+        setTimeout(() => loginUser(data), 800);
+      } catch (err) {
+        btn.textContent = 'Thibitisha Usajili ✓';
+        btn.disabled = false;
+        toast('Mawasiliano na database yamefeli.', 'err');
+      }
+    };
+
+  } else { // Mode ya LOGIN
+    f.innerHTML = `
+      <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:12px;color:var(--accent)">🔑 INGIA MFUMONI</div>
+      <input class="inp" id="l-phone" placeholder="Namba ya Simu (0764674285)" type="tel" style="margin-bottom:10px"/>
+      <input class="inp" id="l-pass" placeholder="Nenosiri" type="password" style="margin-bottom:14px"/>
+      <button class="btn-primary" id="l-btn" style="margin-bottom:12px">Ingia Sasa →</button>
+      <p style="text-align:center;font-size:13px;color:var(--muted)">Huna akaunti bado? <span id="go-reg" style="color:var(--accent);cursor:pointer;font-weight:600">Jisajili hapa</span></p>
+    `;
+
+    el('go-reg').onclick = () => showAuthForm('register');
+
+    el('l-btn').onclick = async () => {
+      const phone = el('l-phone').value.replace(/\D/g, '');
+      const pass = el('l-pass').value;
+
+      if (!phone || !pass) return toast('Tafadhali jaza sehemu zote!', 'err');
+      
+      const btn = el('l-btn');
+      btn.textContent = 'Inaingia...';
+      btn.disabled = true;
+
+      try {
+        const { data, error } = await sb.from('users').select('*').eq('phone', phone).single();
         
-        if (error || !data) {
-          return toast('Mtumiaji hapatikani au namba imekosewa!', 'err');
+        if (error || !data || data.password !== pass) {
+          btn.textContent = 'Ingia Sasa →';
+          btn.disabled = false;
+          return toast('Namba ya simu au nenosiri si sahihi!', 'err');
         }
         
-        // Katika Real project, password inafanyiwa check salama
-        currentUser = data;
-        localStorage.setItem('njem_session', JSON.stringify(data));
-        el('auth-screen').style.display = 'none';
-        el('app').style.display = 'block';
-        await loadData();
-        startLiveScores();
-        renderAppBody();
-        toast('Karibu tena mfalme!', 'success');
+        loginUser(data);
       } catch (err) {
-        toast('Tatizo la mtandao limejitokeza!', 'err');
+        btn.textContent = 'Ingia Sasa →';
+        btn.disabled = false;
+        toast('Hitilafu ya mtandao imejitokeza!', 'err');
       }
     };
   }
@@ -208,25 +265,10 @@ function logout() {
   el('app').style.display = 'none';
   el('auth-screen').style.display = 'block';
   showAuthForm('login');
-  toast('Umetoka kwa usalama mfalme!', 'info');
+  toast('Umetoka kwa usalama!', 'info');
 }
 
-function addMatchToSlip(newMatch) {
-  if (!newMatch.teams || !newMatch.odds) return toast('Jaza timu na odds kwa usahihi', 'err');
-  const cleanNew = newMatch.teams.toLowerCase().replace(/\s+/g,' ').trim();
-  
-  const tayariIpo = pMatches.some(m => {
-    const cleanExisting = m.teams.toLowerCase().replace(/\s+/g,' ').trim();
-    return cleanExisting === cleanNew;
-  });
-
-  if (tayariIpo) return toast('⚠️ Mechi hii tayari imo kwenye mkeka huu!', 'warn');
-
-  pMatches.push(newMatch);
-  toast('Mechi imeongezwa kwa usahihi!');
-  renderAppBody();
-}
-
+// 5. INTERFACE RENDERING
 function renderAppBody() {
   const body = el('app-body');
   if (!body) return;
@@ -273,3 +315,4 @@ document.addEventListener('visibilitychange', () => {
     }
   }
 });
+    
