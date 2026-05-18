@@ -212,6 +212,8 @@ const LEAGUE_MAP = {
   'australia':    '4434',
 };
 
+  let liveScores = {};
+const FOOTBALL_API_KEY = 'd73264988a520615d546704abada1027';
 let liveScores = {}; // { "Team A vs Team B": { home: 1, away: 0, minute: 67, status: "live" } }
 let liveInterval = null;
 let liveEnabled = false;
@@ -1475,7 +1477,67 @@ function renderHome(c){
 
 // Live section tab state
 let liveSectionTab = 'live'; // 'live' | 'upcoming' | 'finished'
+async function loadLiveScores(){
 
+  try{
+
+    const res = await fetch(
+      'https://v3.football.api-sports.io/fixtures?live=all',
+      {
+        headers:{
+          'x-apisports-key': FOOTBALL_API_KEY
+        }
+      }
+    );
+
+    const data = await res.json();
+
+    console.log(data);
+
+    if(!data.response) return;
+
+    liveScores = {};
+
+    data.response.forEach(match=>{
+
+      const home = match.teams.home.name;
+      const away = match.teams.away.name;
+
+      liveScores[home+away] = {
+
+        homeTeam: home,
+        awayTeam: away,
+
+        league: match.league.name,
+
+        home: match.goals.home || 0,
+        away: match.goals.away || 0,
+
+        minute: match.fixture.status.elapsed
+          ? match.fixture.status.elapsed + "'"
+          : 'LIVE',
+
+        status: match.fixture.status.short,
+
+        isLive: true,
+        isFinished: false,
+        isUpcoming: false,
+
+        eventId: match.fixture.id
+
+      };
+
+    });
+
+    renderLiveSection();
+
+  }catch(err){
+
+    console.log(err);
+
+  }
+
+}
 function renderLiveSection() {
   const sec = el('live-section');
   if (!sec) return;
@@ -1980,6 +2042,11 @@ window._aiAnalysis = (teams, mid) => {
 
 // BOOT — Check saved session first
 checkSavedSession();
+  loadLiveScores();
+
+setInterval(()=>{
+  loadLiveScores();
+},60000);
 if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 </script>
 </body>
