@@ -2013,30 +2013,52 @@ async function renderAdmin(c){
 async function checkSavedSession() {
   try {
     const saved = localStorage.getItem('njem_session');
-    if (!saved) { showAuth('login'); return; }
+
+    if (!saved) {
+      showAuth('login');
+      return;
+    }
+
     const savedUser = JSON.parse(saved);
-    if (!savedUser || !savedUser.id) { showAuth('login'); return; }
-    // Verify user still exists in Supabase + get fresh data
-    const { data, error } = await sb.from('users').select('*').eq('id', savedUser.id).maybeSingle();
+
+    if (!savedUser || !savedUser.id) {
+      showAuth('login');
+      return;
+    }
+
+    const { data, error } = await sb
+      .from('users')
+      .select('*')
+      .eq('id', savedUser.id)
+      .maybeSingle();
+
     if (error || !data) {
       localStorage.removeItem('njem_session');
       showAuth('login');
       return;
     }
-    // Auto login with fresh data
+
     await loginUser(data);
-  } catch(e) {
+
+  } catch (e) {
     showAuth('login');
   }
 }
 
 // Global handlers
-window._showMatchDetails = (teams, eventId) => showMatchDetailsModal(teams, eventId);
+window._showMatchDetails = (teams, eventId) =>
+  showMatchDetailsModal(teams, eventId);
+
 window._aiAnalysis = (teams, mid) => {
   readInps();
+
   const match = pMatches.find(m => m._id === mid);
   const teamsStr = match ? match.teams : teams;
-  if (!teamsStr || !teamsStr.includes(' vs ')) return toast('Jaza jina la timu kwanza!', 'warn');
+
+  if (!teamsStr || !teamsStr.includes(' vs ')) {
+    return toast('Jaza jina la timu kwanza!', 'warn');
+  }
+
   showAIAnalysis(teamsStr);
 };
 
