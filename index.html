@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NJEM Tipps v2.0</title>
+  <meta name="theme-color" content="#00ff85"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#05110a;--surface:#0c1f13;--border:#1a3522;
+      --accent:#00ff85;--accent2:#00c965;--text:#e4f0e8;
+      --muted:#4a7a5a;--danger:#ff4444;
+    }
+    body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min-height:100vh}
+    .header{background:rgba(12,31,19,.97);border-bottom:1px solid var(--border);padding:.85rem 1.1rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+    .header-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--accent)}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:1rem;margin-bottom:.75rem}
+    .inp{width:100%;padding:.75rem .9rem;border-radius:12px;border:1.5px solid var(--border);background:rgba(0,0,0,.3);color:var(--text)}
+    .btn-primary{width:100%;padding:.9rem;border-radius:14px;border:none;background:var(--accent);color:#000;font-weight:700;font-size:15px;cursor:pointer}
+    .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:500px;background:rgba(12,31,19,.97);border-top:1px solid var(--border);display:flex;z-index:100}
+    .nav-btn{flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:.6rem .2rem}
+    .nav-label{font-size:9px;color:var(--muted)}
+    .nav-label.active{color:var(--accent);font-weight:700}
+    #toast-container{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+    .toast{padding:.7rem 1rem;border-radius:12px;font-weight:600;font-size:13px;max-width:260px;background:#0c1f13;border:1px solid var(--accent)}
+  </style>
+</head>
+<body>
+<div id="toast-container"></div>
+
+<div id="loading-screen" style="min-height:100vh;background:#05110a;display:flex;flex-direction:column;align-items:center;justify-content:center">
+  <div style="font-family:'Syne',sans-serif;font-size:24px;color:#00ff85">NJEM TIPPS</div>
+  <p style="color:#4a7a5a;margin-top:10px">Inapakia...</p>
+</div>
+
+<div id="app" style="display:none;max-width:500px;margin:0 auto;min-height:100vh;padding-bottom:80px">
+  <div class="header">
+    <div class="header-title">NJEM TIPPS v2.0</div>
+    <div id="bankroll-display" style="background:rgba(0,0,0,.4);padding:6px 12px;border-radius:20px;font-size:13px">Bankroll: TZS 0</div>
+  </div>
+
+  <div id="content" style="padding:1rem"></div>
+
+  <div class="bottom-nav">
+    <button class="nav-btn" onclick="switchTab('home')"><span class="nav-label active" id="nav-home">Home</span></button>
+    <button class="nav-btn" onclick="switchTab('fixtures')"><span class="nav-label" id="nav-fixtures">Fixtures</span></button>
+    <button class="nav-btn" onclick="switchTab('mikeka')"><span class="nav-label" id="nav-mikeka">Mikeka Yangu</span></button>
+    <button class="nav-btn" onclick="switchTab('public')"><span class="nav-label" id="nav-public">Public</span></button>
+  </div>
+</div>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+const SUPA_URL = 'https://mhmcvvfoylbnwqfwioys.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1obWN2dmZveWxibndxZndpb3lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5Mzc3NDUsImV4cCI6MjA5NDUxMzc0NX0.DJx01EDheWCjpq2nkdK0aljTmf9irfTugPhn_fTXSWM';
+
+const sb = createClient(SUPA_URL, SUPA_KEY);
+
+let currentUser = null;
+let currentTab = 'home';
+let liveScores = {};
+let allFixtures = [];
+
+function toast(msg, color = '#00ff85') {
+  const div = document.createElement('div');
+  div.className = 'toast';
+  div.style.borderColor = color;
+  div.textContent = msg;
+  document.getElementById('toast-container').appendChild(div);
+  setTimeout(() => div.remove(), 4500);
+}
+
+async function fetchLiveScores() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    let events = [];
+
+    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/447279/eventsday.php?d=${today}&s=Soccer`);
+    if (res.ok) {
+      const data = await res.json();
+      events = data.events || [];
+    }
+
+    events.forEach(ev => {
+      if (!ev.strHomeTeam || !ev.strAwayTeam) return;
+      const key = `${ev.strHomeTeam} vs ${ev.strAwayTeam}`.toLowerCase().trim();
+      liveScores[key] = {
+        home: ev.intHomeScore ?? '-',
+        away: ev.intAwayScore ?? '-',
+        minute: ev.strProgress || 'LIVE',
+        league: ev.strLeague || 'Unknown',
+        isFinished: ['FT','AET','PEN'].some(s => (ev.strStatus || '').includes(s))
+      };
+    });
+
+    if (currentTab === 'home') renderHome();
+  } catch(e) { console.log(e); }
+}
+
+function renderHome() {
+  let html = `<h2 style="margin-bottom:15px">🔴 Live Scores</h2>`;
+  Object.keys(liveScores).slice(0,8).forEach(key => {
+    const m = liveScores[key];
+    html += `<div class="card"><small>\( {m.league}</small><br><strong> \){key}</strong><br>${m.home} - \( {m.away} <small> \){m.minute}</small></div>`;
+  });
+  document.getElementById('content').innerHTML = html || '<p>Hakuna mechi za live kwa sasa.</p>';
+}
+
+async function loadFixtures() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/447279/eventsday.php?d=${today}&s=Soccer`);
+    if (res.ok) {
+      const data = await res.json();
+      allFixtures = data.events || [];
+    }
+    renderFixtures();
+  } catch(e) { toast("Imeshindwa kupata fixtures", "#ffaa00"); }
+}
+
+function renderFixtures() {
+  let html = `<h2>Fixtures za Leo (${allFixtures.length})</h2>`;
+  allFixtures.forEach(f => {
+    html += `
+      <div class="card">
+        <small>${f.strLeague}</small><br>
+        <b>${f.strHomeTeam} vs ${f.strAwayTeam}</b><br>
+        <small>${f.strTime || ''}</small>
+        <button onclick="addToBetslip('${f.strHomeTeam} vs ${f.strAwayTeam}')" style="margin-top:10px" class="btn-primary">Weka kwenye Betslip</button>
+      </div>`;
+  });
+  document.getElementById('content').innerHTML = html;
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.nav-label').forEach(l => l.classList.remove('active'));
+  document.getElementById(`nav-${tab}`).classList.add('active');
+
+  if (tab === 'home') renderHome();
+  else if (tab === 'fixtures') loadFixtures();
+  else if (tab === 'mikeka') document.getElementById('content').innerHTML = `<h2>Mikeka Yangu</h2><p>Inakuja hivi karibuni...</p>`;
+  else if (tab === 'public') document.getElementById('content').innerHTML = `<h2>Mikeka ya Umma</h2><p>Inapakia...</p>`;
+}
+
+window.addToBetslip = function(teams) {
+  toast(`✅ ${teams} imeongezwa kwenye betslip!`);
+};
+
+async function initApp() {
+  currentUser = { bankroll: 125000 };
+  document.getElementById('bankroll-display').textContent = `Bankroll: TZS ${currentUser.bankroll.toLocaleString()}`;
+
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+
+  switchTab('home');
+  await fetchLiveScores();
+  setInterval(fetchLiveScores, 40000);
+}
+
+initApp();
+</script>
+</body>
+</html>
