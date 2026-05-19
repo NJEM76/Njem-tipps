@@ -1,5 +1,4 @@
-    
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="sw">
 <head>
   <meta charset="UTF-8"/>
@@ -11,8 +10,7 @@
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     :root{
       --bg:#05110a;--surface:#0c1f13;--border:#1a3522;
-      --accent:#00ff85;--accent2:#00c965;--text:#e4f0e8;
-      --muted:#4a7a5a;--danger:#ff4444;
+      --accent:#00ff85;--text:#e4f0e8;--muted:#4a7a5a;
     }
     body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min-height:100vh}
     .header{background:rgba(12,31,19,.97);border-bottom:1px solid var(--border);padding:.85rem 1.1rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
@@ -24,6 +22,8 @@
     .nav-label.active{color:var(--accent);font-weight:700}
     #toast-container{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px}
     .toast{padding:.7rem 1rem;border-radius:12px;font-weight:600;font-size:13px;max-width:260px;background:#0c1f13;border:1px solid var(--accent)}
+    .live-dot{width:8px;height:8px;background:#ff4444;border-radius:50%;display:inline-block;margin-right:6px;animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
   </style>
 </head>
 <body>
@@ -72,22 +72,27 @@ async function fetchLiveScores() {
       const events = data.events || [];
       
       liveScores = {};
-      
+
       events.forEach(ev => {
         if (!ev.strHomeTeam || !ev.strAwayTeam) return;
-        
+
         const key = `${ev.strHomeTeam} vs ${ev.strAwayTeam}`.toLowerCase().trim();
-        const status = (ev.strStatus || '').toLowerCase();
-        
-        const isLive = ['live', '1h', '2h', 'ht', 'in progress'].some(s => status.includes(s)) ||
-                       (ev.intHomeScore !== null && ev.intAwayScore !== null);
+        const status = (ev.strStatus || '').toUpperCase();
+        const progress = (ev.strProgress || '').toUpperCase();
+
+        // Logic iliyoboreshwa sana
+        const isLive = ['1H', '2H', 'HT', 'ET', 'LIVE', 'IN PROGRESS'].some(s => status.includes(s) || progress.includes(s)) ||
+                       (status === '' && (ev.intHomeScore !== null || ev.intAwayScore !== null));
+
+        const isFinished = ['FT', 'AET', 'PEN', 'FINISHED', 'MATCH FINISHED'].some(s => status.includes(s));
 
         liveScores[key] = {
           home: ev.intHomeScore !== null ? ev.intHomeScore : '-',
           away: ev.intAwayScore !== null ? ev.intAwayScore : '-',
-          minute: ev.strProgress || (isLive ? 'LIVE' : 'NS'),
-          league: ev.strLeague || 'Unknown League',
-          isLive: isLive
+          minute: ev.strProgress || (isFinished ? 'FT' : isLive ? 'LIVE' : ''),
+          league: ev.strLeague || 'Unknown',
+          isLive: isLive && !isFinished,
+          isFinished: isFinished
         };
       });
     }
@@ -95,18 +100,18 @@ async function fetchLiveScores() {
     if (currentTab === 'home') renderHome();
   } catch(e) {
     console.error(e);
-    document.getElementById('content').innerHTML = `<p style="color:red;padding:30px">Error ya mtandao. Jaribu tena.</p>`;
   }
 }
 
 function renderHome() {
-  let html = `<h2 style="margin-bottom:15px">🔴 Live Scores</h2>`;
+  let html = `<h2 style="margin-bottom:15px"><span class="live-dot"></span> Live Scores</h2>`;
+
   const liveMatches = Object.keys(liveScores).filter(k => liveScores[k].isLive);
 
   if (liveMatches.length === 0) {
     html += `<p style="text-align:center;padding:60px 20px;color:#4a7a5a">
       Hakuna mechi za live kwa sasa 😔<br>
-      <small>Mechi zitaonekana hapa wakati zinaendelea</small>
+      <small>Mechi zitajitokeza kiotomatiki</small>
     </p>`;
   } else {
     liveMatches.forEach(key => {
@@ -115,7 +120,7 @@ function renderHome() {
         <div class="card">
           <small style="color:#4a7a5a">${m.league}</small><br>
           <strong>${key}</strong><br>
-          <span style="font-size:19px;font-weight:700">${m.home} - ${m.away}</span>
+          <span style="font-size:20px;font-weight:700">${m.home} - ${m.away}</span>
           <span style="float:right;color:#00ff85;font-weight:700">${m.minute}</span>
         </div>`;
     });
@@ -126,37 +131,17 @@ function renderHome() {
 function switchTab(tab) {
   currentTab = tab;
   document.querySelectorAll('.nav-label').forEach(el => el.classList.remove('active'));
-  const activeEl = document.getElementById('nav-' + tab);
-  if (activeEl) activeEl.classList.add('active');
+  const el = document.getElementById('nav-' + tab);
+  if (el) el.classList.add('active');
 
   if (tab === 'home') renderHome();
   else if (tab === 'fixtures') loadFixtures();
-  else if (tab === 'mikeka') document.getElementById('content').innerHTML = `<h2>Mikeka Yangu</h2><p>Inakuja hivi karibuni...</p>`;
-  else if (tab === 'public') document.getElementById('content').innerHTML = `<h2>Mikeka ya Umma</h2><p>Inakuja hivi karibuni...</p>`;
+  else document.getElementById('content').innerHTML = `<h2>${tab.toUpperCase()}</h2><p>Inakuja hivi karibuni...</p>`;
 }
 
 async function loadFixtures() {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/447279/eventsday.php?d=${today}&s=Soccer`);
-    if (res.ok) {
-      const data = await res.json();
-      const events = data.events || [];
-      let html = `<h2>Fixtures za Leo (${events.length})</h2>`;
-      events.forEach(f => {
-        html += `
-          <div class="card">
-            <small>${f.strLeague || ''}</small><br>
-            <b>${f.strHomeTeam} vs ${f.strAwayTeam}</b><br>
-            <small>${f.strTime || ''}</small>
-            <button onclick="addToBetslip('${f.strHomeTeam} vs ${f.strAwayTeam}')" style="margin-top:10px" class="btn-primary">Weka kwenye Betslip</button>
-          </div>`;
-      });
-      document.getElementById('content').innerHTML = html;
-    }
-  } catch(e) {
-    toast("Imeshindwa kupata fixtures");
-  }
+  // ... (tutaongeza baadaye)
+  toast("Fixtures inakuja hivi karibuni");
 }
 
 window.addToBetslip = function(teams) {
