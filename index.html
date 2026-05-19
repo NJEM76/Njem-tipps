@@ -107,6 +107,7 @@ const LOSS_STREAK_LIMIT=3;
 // ═══════════════════════════════════════
 let APISPORTS_KEY    = localStorage.getItem('njem_apisports_key')    || '';
 let ALLSPORTS_KEY    = localStorage.getItem('njem_allsports_key')    || '';
+let SPORTMONKS_KEY   = localStorage.getItem('njem_sportmonks_key')   || '';
 const SPORTSDB_KEY   = '447279';
 
 // ── API-Football league IDs (api-sports.io) ──────────────────────────
@@ -220,6 +221,45 @@ const ALLSPORTS_LEAGUE_IDS = {
   'brasileirao':23,
 };
 
+// ── Sportmonks API league IDs (free trial — 120 leagues) ─────────────
+// Trial inapatikana kwa wiki 2 — haina Tanzania lakini ina ligi nyingi
+const SPORTMONKS_LEAGUE_IDS = {
+  // Africa (zilizopo kwenye plan ya trial)
+  'psl':         501,   // South Africa PSL
+  'npfl':        762,   // Nigeria Premier League
+  'egypt':       640,   // Egyptian Premier League
+  'ghana':       764,   // Ghana Premier League
+  'caf_cl':      7,     // CAF Champions League
+  // Europe
+  'epl':         2,     // Premier League
+  'laliga':      6,     // La Liga
+  'bundesliga':  4,     // Bundesliga
+  'seriea':      5,     // Serie A
+  'ligue1':      3,     // Ligue 1
+  'ucl':         1,     // Champions League
+  'uel':         20,    // Europa League
+  'uecl':        21,    // Conference League
+  'eredivisie':  8,     // Eredivisie
+  'primeira':    9,     // Primeira Liga
+  'jupiler':     208,   // Belgian Pro League
+  'superlig':    349,   // Turkish Süper Lig
+  'championship':24,    // Championship
+  'scottish':    501,   // Scottish Prem
+  'ekstraklasa': 204,   // Ekstraklasa
+  'rpl':         113,   // Russian Premier
+  'czech':       185,   // Czech First League
+  'romanian':    274,   // Liga 1 Romania
+  // Americas
+  'mls':         35,    // MLS USA
+  'brasileirao': 72,    // Brasileirao
+  'liga_mx':     20,    // Liga MX
+  'argentina':   128,   // Liga Argentina
+  'libertadores':25,    // Copa Libertadores
+  // Asia
+  'jleague':     16,    // J-League
+  'saudi':       307,   // Saudi Pro League
+};
+
 // ── TheSportsDB league IDs (fallback) ────────────────────────────────
 const LEAGUE_MAP = {
   'epl':'4328','laliga':'4335','bundesliga':'4331','seriea':'4332',
@@ -286,7 +326,62 @@ async function allsportsFetch(endpoint) {
   } catch(e) { console.warn('AllSports exception:', e.message); return null; }
 }
 
-// ── 3. TheSportsDB (free, no key needed) ─────────────────────────────
+// ── 3. Sportmonks API ────────────────────────────────────────────────
+async function sportmonksFetch(endpoint) {
+  if (!SPORTMONKS_KEY) return null;
+  try {
+    const base = 'https://api.sportmonks.com/v3/football/';
+    const sep  = endpoint.includes('?') ? '&' : '?';
+    const url  = `${base}${endpoint}${sep}api_token=${SPORTMONKS_KEY}`;
+    const res  = await fetch(url);
+    if (!res.ok) { console.warn('Sportmonks HTTP', res.status); return null; }
+    const json = await res.json();
+    if (json.message && json.message.includes('token')) {
+      console.warn('Sportmonks auth error:', json.message);
+      return null;
+    }
+    return json;
+  } catch(e) { console.warn('Sportmonks exception:', e.message); return null; }
+}
+
+function normaliseSportmonks(fix, nowMs) {
+  const home = fix.participants?.find(p => p.meta?.location === 'home')?.name;
+  const away = fix.participants?.find(p => p.meta?.location === 'away')?.name;
+  if (!home || !away) return null;
+  const statusShort = fix.state?.short_name || fix.state?.state || 'NS';
+  const liveStates  = ['1H','2H','HT','ET','BT','PEN','INT','LIVE'];
+  const finStates   = ['FT','AET','PENFT','FT_PEN','CANCL','ABD','POSTP'];
+  const isLive     = liveStates.includes(statusShort) || (fix.state?.state === 'inprogress');
+  const isFinished = finStates.some(s => statusShort.startsWith(s));
+  const elapsed    = fix.periods?.find(p => p.tba === false)?.minutes || fix.minute;
+  let minuteDisplay = '', minuteNum = 0;
+  if (statusShort === 'HT') { minuteDisplay = 'HT'; minuteNum = 45; }
+  else if (isLive && elapsed) { minuteNum = parseInt(elapsed)||0; minuteDisplay = minuteNum + "'"; }
+  else if (isFinished) { minuteDisplay = 'FT'; }
+  const homeLogo = fix.participants?.find(p => p.meta?.location === 'home')?.image_path || '';
+  const awayLogo = fix.participants?.find(p => p.meta?.location === 'away')?.image_path || '';
+  const hScore   = fix.scores?.find(s => s.score?.participant === 'home' && s.description === 'CURRENT');
+  const aScore   = fix.scores?.find(s => s.score?.participant === 'away' && s.description === 'CURRENT');
+  const startAt  = fix.starting_at ? new Date(fix.starting_at) : null;
+  const timeStr  = startAt ? startAt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '';
+  const dateStr  = fix.starting_at?.split(' ')[0] || fix.starting_at?.split('T')[0] || '';
+  return {
+    home: hScore?.score?.goals ?? '-',
+    away: aScore?.score?.goals ?? '-',
+    homeTeam: home, awayTeam: away,
+    homeLogo, awayLogo,
+    minute: minuteDisplay, minuteNum, status: statusShort,
+    league: fix.league?.name || '', leagueLogo: fix.league?.image_path || '',
+    country: fix.league?.country?.name || '',
+    fixtureId: fix.id,
+    venue: fix.venue?.name || '',
+    time: timeStr, date: dateStr,
+    fetchedAt: nowMs, isLive, isFinished,
+    isUpcoming: !isLive && !isFinished, _src: 'sportmonks',
+  };
+}
+
+// ── 4. TheSportsDB (free, no key needed) ─────────────────────────────
 async function sportsdbFetch(path) {
   try {
     const res = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/${path}`);
@@ -384,9 +479,12 @@ function ingestScoreData(scoreData) {
   if (!scoreData) return;
   const k1 = `${scoreData.homeTeam} vs ${scoreData.awayTeam}`.toLowerCase();
   const k2 = `${scoreData.awayTeam} vs ${scoreData.homeTeam}`.toLowerCase();
-  // API-Football data wins over lower-quality sources
+  // Priority: apifootball > sportmonks > allsports > sportsdb
   const existing = liveScores[k1];
-  if (existing && existing._src === 'apifootball' && scoreData._src !== 'apifootball') return;
+  const srcPriority = { apifootball: 3, sportmonks: 2, allsports: 1, sportsdb: 0 };
+  const existPri = srcPriority[existing?._src] ?? -1;
+  const newPri   = srcPriority[scoreData._src] ?? -1;
+  if (existing && existPri >= newPri) return;
   liveScores[k1] = scoreData;
   liveScores[k2] = scoreData;
 }
@@ -414,7 +512,16 @@ async function fetchLiveScores() {
     } catch(e) { console.warn('API-Football live fetch:', e.message); }
   }
 
-  // ── Source 2: AllSports API (secondary) ───────────────────────────
+  // ── Source 2: Sportmonks (secondary, 2-week free trial) ──────────
+  if (SPORTMONKS_KEY) {
+    try {
+      const smRes = await sportmonksFetch(`fixtures/date/${todayStr}?include=participants;scores;state;league`);
+      const nowMs2 = Date.now();
+      (smRes?.data || []).forEach(fix => ingestScoreData(normaliseSportmonks(fix, nowMs2)));
+    } catch(e) { console.warn('Sportmonks live fetch:', e.message); }
+  }
+
+  // ── Source 3: AllSports API (tertiary) ───────────────────────────
   if (ALLSPORTS_KEY) {
     try {
       const res = await allsportsFetch(`?met=Fixtures&from=${todayStr}&to=${todayStr}`);
@@ -422,7 +529,7 @@ async function fetchLiveScores() {
     } catch(e) { console.warn('AllSports live fetch:', e.message); }
   }
 
-  // ── Source 3: TheSportsDB (free fallback) ─────────────────────────
+  // ── Source 4: TheSportsDB (free fallback) ─────────────────────────
   try {
     const data = await sportsdbFetch(`eventsday.php?d=${todayStr}&s=Soccer`);
     (data?.events || []).forEach(ev => ingestScoreData(normaliseSportsdb(ev, nowMs)));
@@ -2230,7 +2337,44 @@ async function loadFixMatchesFree(league) {
     }
   }
 
-  // ── Source 2: AllSports API ──────────────────────────────────────
+  // ── Source 2: Sportmonks (free trial — 120 leagues) ──────────────
+  if (!matches.length && SPORTMONKS_KEY) {
+    const lgId = SPORTMONKS_LEAGUE_IDS[league.id];
+    if (lgId) {
+      try {
+        const data = await sportmonksFetch(
+          `fixtures/date/${fixSelectedDate}?filters=leagueId:${lgId}&include=participants;scores;state;league;venue`
+        );
+        if ((data?.data||[]).length > 0) {
+          const nowMs = Date.now();
+          matches = data.data.map(fix => normaliseSportmonks(fix, nowMs)).filter(Boolean);
+          srcLabel = '🟢 Sportmonks';
+        }
+      } catch(e) { console.warn('fix src2 Sportmonks:', e.message); }
+    }
+    // Kama league haina ID kwenye Sportmonks, jaribu kuSearch kwa jina
+    if (!matches.length) {
+      try {
+        const today2 = fixSelectedDate;
+        const data = await sportmonksFetch(
+          `fixtures/date/${today2}?include=participants;scores;state;league`
+        );
+        if ((data?.data||[]).length > 0) {
+          const nowMs = Date.now();
+          const lgNameLower = league.name.toLowerCase();
+          const filtered = (data.data).filter(fix =>
+            fix.league?.name?.toLowerCase().includes(lgNameLower.split(' ')[0])
+          );
+          if (filtered.length > 0) {
+            matches = filtered.map(fix => normaliseSportmonks(fix, nowMs)).filter(Boolean);
+            srcLabel = '🟢 Sportmonks';
+          }
+        }
+      } catch(e) { console.warn('fix src2b Sportmonks search:', e.message); }
+    }
+  }
+
+  // ── Source 3: AllSports API ──────────────────────────────────────
   if (!matches.length && ALLSPORTS_KEY) {
     const lgId = ALLSPORTS_LEAGUE_IDS[league.id];
     if (lgId) {
@@ -2241,34 +2385,59 @@ async function loadFixMatchesFree(league) {
           matches = data.result.map(ev => normaliseAllsports(ev, nowMs)).filter(Boolean);
           srcLabel = '🌐 AllSports';
         }
-      } catch(e) { console.warn('fix src2:', e.message); }
+      } catch(e) { console.warn('fix src3 AllSports:', e.message); }
     }
   }
 
-  // ── Source 3: TheSportsDB (free fallback) ────────────────────────
+  // ── Source 4: TheSportsDB (free fallback) ────────────────────────
   if (!matches.length && league.sportsdbId) {
     try {
+      // First try: fetch by league sportsdbId directly
       const data = await sportsdbFetch(`eventsday.php?d=${fixSelectedDate}&l=${league.sportsdbId}`);
       let evs = data?.events || [];
-      // secondary fallback: search all soccer then filter by league name
+
+      // If direct league fetch returned results, filter by league name for accuracy
+      // (multiple Tanzania leagues share sportsdbId 4637, so we must filter)
+      if (evs.length > 0 && league.id !== 'tpl') {
+        // For cups/other leagues sharing same sportsdbId, filter by league name keyword
+        const keyword = league.name.split(' ')[0].toLowerCase(); // e.g. "CRDB", "Mapinduzi"
+        const filtered = evs.filter(ev => ev.strLeague?.toLowerCase().includes(keyword));
+        // Only use filtered results if we actually find something; else show TPL matches with note
+        if (filtered.length > 0) evs = filtered;
+        else {
+          // Show the raw TPL matches but with a note that it's the closest available data
+          // (don't fall through to name search — that causes all-Tanzania bug)
+        }
+      }
+
+      // Second try only if direct fetch gave nothing AND league name search is reliable
       if (!evs.length) {
         const data2 = await sportsdbFetch(`eventsday.php?d=${fixSelectedDate}&s=Soccer`);
-        const nameParts = league.name.toLowerCase().split(' ');
-        evs = (data2?.events || []).filter(ev =>
-          nameParts.some(p => p.length > 3 && ev.strLeague?.toLowerCase().includes(p))
-        );
+        // Use STRICT filtering: ALL significant words must match (not just one)
+        const nameParts = league.name.toLowerCase()
+          .replace(/[^\w\s]/g,'')
+          .split(' ')
+          .filter(p => p.length > 3 && !['premier','league','super','first','division','national'].includes(p));
+        if (nameParts.length > 0) {
+          evs = (data2?.events || []).filter(ev => {
+            const lgLower = ev.strLeague?.toLowerCase() || '';
+            // ALL keywords must match (strict AND filter prevents wrong leagues)
+            return nameParts.every(p => lgLower.includes(p));
+          });
+        }
       }
+
       if (evs.length > 0) {
         const nowMs = Date.now();
         matches = evs.map(ev => normaliseSportsdb(ev, nowMs)).filter(Boolean);
         srcLabel = '📡 TheSportsDB';
       }
-    } catch(e) { console.warn('fix src3:', e.message); }
+    } catch(e) { console.warn('fix src4 TheSportsDB:', e.message); }
   }
 
   // ── No data found ────────────────────────────────────────────────
   if (!matches.length) {
-    const hasAnyKey = APISPORTS_KEY || ALLSPORTS_KEY;
+    const hasAnyKey = APISPORTS_KEY || ALLSPORTS_KEY || SPORTMONKS_KEY;
     out.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem">
         <span style="font-size:18px">${league.flag}</span>
@@ -2279,7 +2448,7 @@ async function loadFixMatchesFree(league) {
         <div style="margin-top:8px;font-size:13px;font-weight:600">Hakuna mechi tarehe ${fixSelectedDate}</div>
         <div style="font-size:11px;margin-top:6px;line-height:1.5">
           ${!hasAnyKey
-            ? `⚠️ Ongeza <strong style="color:var(--warn)">API-Football key</strong> au <strong style="color:var(--warn)">AllSports key</strong> kwenye Admin kwa data sahihi zaidi (hasa ligi za Afrika na Tanzania)`
+            ? `⚠️ Ongeza <strong style="color:var(--warn)">Sportmonks</strong>, <strong style="color:var(--warn)">API-Football</strong> au <strong style="color:var(--warn)">AllSports key</strong> kwenye Admin kwa data sahihi zaidi`
             : `Ligi hii inaweza kuwa na mapumziko leo, au tarehe hii haina mechi zilizopangwa.`}
         </div>
         <button onclick="window._fixPickLeague('${league.id}')" style="margin-top:14px;padding:.5rem 1.25rem;border-radius:10px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;cursor:pointer">🔄 Jaribu Tena</button>
@@ -2825,10 +2994,23 @@ async function renderAdmin(c){
       <input class="inp" id="apisports-key" placeholder="Paste API-Football key hapa..." style="margin-bottom:8px" value="${APISPORTS_KEY}"/>
       <button onclick="window._saveApiSports()" class="btn-ghost" style="border-color:var(--warn);color:var(--warn);margin-bottom:14px">💾 Hifadhi API-Football Key</button>
 
+      <!-- Sportmonks -->
+      <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:4px">2️⃣ Sportmonks — Free Trial (Wiki 2) 🆕</div>
+      <div style="font-size:11px;margin-bottom:6px;color:${SPORTMONKS_KEY?'var(--win)':'var(--muted)'}">
+        ${SPORTMONKS_KEY?`✅ Imeunganishwa — ${120} ligi zinapatikana (bila Tanzania bado)`:'⚪ Haijawekwa — Ongeza kwa data zaidi ya Ulaya na Afrika'}
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:6px;background:rgba(0,0,0,.3);padding:.5rem;border-radius:8px">
+        💡 Free trial wiki 2 · 120 ligi · EPL, La Liga, Serie A, Bundesliga, PSL ✅<br>
+        ⚠️ Tanzania (TPL) haipo kwenye trial plan<br>
+        Pata key: <a href="https://app.sportmonks.com/register" target="_blank" style="color:var(--win)">app.sportmonks.com/register</a>
+      </div>
+      <input class="inp" id="sportmonks-key" placeholder="Paste Sportmonks API token hapa..." style="margin-bottom:8px" value="${SPORTMONKS_KEY}"/>
+      <button onclick="window._saveSportmonks()" class="btn-ghost" style="border-color:var(--win);color:var(--win);margin-bottom:14px">💾 Hifadhi Sportmonks Key</button>
+
       <!-- AllSports -->
-      <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:4px">2️⃣ AllSports API — Secondary Backup</div>
+      <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:4px">3️⃣ AllSports API — Backup</div>
       <div style="font-size:11px;margin-bottom:6px;color:${ALLSPORTS_KEY?'var(--win)':'var(--muted)'}">
-        ${ALLSPORTS_KEY?`✅ Imeunganishwa — Inafanya kazi kama backup`:'ℹ️ Haijawekwa — Itasaidia kama API-Football imekwisha quota'}
+        ${ALLSPORTS_KEY?`✅ Imeunganishwa — Inafanya kazi kama backup`:'ℹ️ Haijawekwa — Itasaidia kama vyanzo vingine vimekwisha quota'}
       </div>
       <div style="font-size:10px;color:var(--muted);margin-bottom:6px;background:rgba(0,0,0,.3);padding:.5rem;border-radius:8px">
         💡 Free tier inapatikana · Afrika coverage nzuri · Backup reliable<br>
@@ -2841,6 +3023,7 @@ async function renderAdmin(c){
       <div style="font-size:10px;padding:.5rem;background:rgba(0,0,0,.3);border-radius:8px;margin-top:4px">
         📊 Hali ya vyanzo: 
         <span style="color:${APISPORTS_KEY?'var(--win)':'var(--danger)'}">API-Football ${APISPORTS_KEY?'✅':'❌'}</span> · 
+        <span style="color:${SPORTMONKS_KEY?'var(--win)':'var(--muted)'}">Sportmonks ${SPORTMONKS_KEY?'✅':'⚪'}</span> · 
         <span style="color:${ALLSPORTS_KEY?'var(--win)':'var(--warn)'}">AllSports ${ALLSPORTS_KEY?'✅':'⚠️'}</span> · 
         <span style="color:var(--win)">TheSportsDB ✅ (free)</span>
       </div>
@@ -2862,6 +3045,13 @@ async function renderAdmin(c){
     localStorage.setItem('njem_apisports_key',APISPORTS_KEY);
     toast(APISPORTS_KEY?`✅ API-Football key imehifadhiwa!`:'Key ni empty','warn');
     if(APISPORTS_KEY) fetchLiveScores();
+    renderAdmin(c);
+  };
+  window._saveSportmonks=()=>{
+    SPORTMONKS_KEY=el('sportmonks-key')?.value?.trim()||'';
+    localStorage.setItem('njem_sportmonks_key',SPORTMONKS_KEY);
+    toast(SPORTMONKS_KEY?`✅ Sportmonks key imehifadhiwa!`:'Key ni empty','warn');
+    if(SPORTMONKS_KEY) fetchLiveScores();
     renderAdmin(c);
   };
   window._saveAllSports=()=>{
