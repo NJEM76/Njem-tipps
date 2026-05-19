@@ -22,8 +22,8 @@
     .nav-label.active{color:var(--accent);font-weight:700}
     #toast-container{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px}
     .toast{padding:.7rem 1rem;border-radius:12px;font-weight:600;font-size:13px;max-width:260px;background:#0c1f13;border:1px solid var(--accent)}
-    .live-dot{width:8px;height:8px;background:#ff4444;border-radius:50%;display:inline-block;margin-right:6px;animation:pulse 2s infinite}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+    .live-dot{width:9px;height:9px;background:#ff4444;border-radius:50%;display:inline-block;margin-right:6px;animation:pulse 1.5s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
   </style>
 </head>
 <body>
@@ -31,7 +31,7 @@
 
 <div id="loading-screen" style="min-height:100vh;background:#05110a;display:flex;flex-direction:column;align-items:center;justify-content:center">
   <div style="font-family:'Syne',sans-serif;font-size:24px;color:#00ff85">NJEM TIPPS</div>
-  <p style="color:#4a7a5a;margin-top:10px">Inapakia...</p>
+  <p style="color:#4a7a5a;margin-top:10px">Inapakia mechi za live...</p>
 </div>
 
 <div id="app" style="display:none;max-width:500px;margin:0 auto;min-height:100vh;padding-bottom:80px">
@@ -59,7 +59,7 @@ function toast(msg) {
   t.className = 'toast';
   t.textContent = msg;
   document.getElementById('toast-container').appendChild(t);
-  setTimeout(() => t.remove(), 4000);
+  setTimeout(() => t.remove(), 3500);
 }
 
 async function fetchLiveScores() {
@@ -77,23 +77,33 @@ async function fetchLiveScores() {
         if (!ev.strHomeTeam || !ev.strAwayTeam) return;
 
         const key = `${ev.strHomeTeam} vs ${ev.strAwayTeam}`.toLowerCase().trim();
-        const status = (ev.strStatus || '').toUpperCase();
+        const status = (ev.strStatus || '').toUpperCase().trim();
         const progress = (ev.strProgress || '').toUpperCase();
 
         // Logic iliyoboreshwa sana
-        const isLive = ['1H', '2H', 'HT', 'ET', 'LIVE', 'IN PROGRESS'].some(s => status.includes(s) || progress.includes(s)) ||
-                       (status === '' && (ev.intHomeScore !== null || ev.intAwayScore !== null));
+        let isLive = false;
+        let minute = '';
 
-        const isFinished = ['FT', 'AET', 'PEN', 'FINISHED', 'MATCH FINISHED'].some(s => status.includes(s));
+        if (status.includes('1H') || status.includes('2H') || status.includes('HT') || 
+            status.includes('ET') || status.includes('LIVE') || status.includes('IN PROGRESS') ||
+            progress.includes('1H') || progress.includes('2H')) {
+          isLive = true;
+          minute = ev.strProgress || 'LIVE';
+        }
 
-        liveScores[key] = {
-          home: ev.intHomeScore !== null ? ev.intHomeScore : '-',
-          away: ev.intAwayScore !== null ? ev.intAwayScore : '-',
-          minute: ev.strProgress || (isFinished ? 'FT' : isLive ? 'LIVE' : ''),
-          league: ev.strLeague || 'Unknown',
-          isLive: isLive && !isFinished,
-          isFinished: isFinished
-        };
+        const isFinished = status.includes('FT') || status.includes('AET') || 
+                          status.includes('PEN') || status.includes('FINISHED') || 
+                          status.includes('MATCH FINISHED');
+
+        if (isLive && !isFinished) {
+          liveScores[key] = {
+            home: ev.intHomeScore !== null ? ev.intHomeScore : 0,
+            away: ev.intAwayScore !== null ? ev.intAwayScore : 0,
+            minute: minute,
+            league: ev.strLeague || 'Unknown',
+            isLive: true
+          };
+        }
       });
     }
     
@@ -106,21 +116,21 @@ async function fetchLiveScores() {
 function renderHome() {
   let html = `<h2 style="margin-bottom:15px"><span class="live-dot"></span> Live Scores</h2>`;
 
-  const liveMatches = Object.keys(liveScores).filter(k => liveScores[k].isLive);
+  const liveKeys = Object.keys(liveScores);
 
-  if (liveMatches.length === 0) {
-    html += `<p style="text-align:center;padding:60px 20px;color:#4a7a5a">
+  if (liveKeys.length === 0) {
+    html += `<p style="text-align:center;padding:80px 20px;color:#4a7a5a">
       Hakuna mechi za live kwa sasa 😔<br>
-      <small>Mechi zitajitokeza kiotomatiki</small>
+      <small>Jaribu tena baada ya dakika chache</small>
     </p>`;
   } else {
-    liveMatches.forEach(key => {
+    liveKeys.forEach(key => {
       const m = liveScores[key];
       html += `
         <div class="card">
           <small style="color:#4a7a5a">${m.league}</small><br>
           <strong>${key}</strong><br>
-          <span style="font-size:20px;font-weight:700">${m.home} - ${m.away}</span>
+          <span style="font-size:21px;font-weight:700">${m.home} - ${m.away}</span>
           <span style="float:right;color:#00ff85;font-weight:700">${m.minute}</span>
         </div>`;
     });
@@ -131,22 +141,12 @@ function renderHome() {
 function switchTab(tab) {
   currentTab = tab;
   document.querySelectorAll('.nav-label').forEach(el => el.classList.remove('active'));
-  const el = document.getElementById('nav-' + tab);
-  if (el) el.classList.add('active');
+  const active = document.getElementById('nav-' + tab);
+  if (active) active.classList.add('active');
 
   if (tab === 'home') renderHome();
-  else if (tab === 'fixtures') loadFixtures();
-  else document.getElementById('content').innerHTML = `<h2>${tab.toUpperCase()}</h2><p>Inakuja hivi karibuni...</p>`;
+  else document.getElementById('content').innerHTML = `<h2 style="padding:20px">${tab.toUpperCase()} - Inakuja hivi karibuni</h2>`;
 }
-
-async function loadFixtures() {
-  // ... (tutaongeza baadaye)
-  toast("Fixtures inakuja hivi karibuni");
-}
-
-window.addToBetslip = function(teams) {
-  toast(`✅ ${teams} imeongezwa kwenye betslip!`);
-};
 
 function initApp() {
   document.getElementById('loading-screen').style.display = 'none';
@@ -154,7 +154,7 @@ function initApp() {
   
   switchTab('home');
   fetchLiveScores();
-  setInterval(fetchLiveScores, 30000);
+  setInterval(fetchLiveScores, 25000);   // Refresh kila sekunde 25
 }
 
 window.onload = initApp;
