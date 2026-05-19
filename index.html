@@ -52,26 +52,88 @@
 </div>
 
 <script type="module">
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
-
-const SUPA_URL = 'https://mhmcvvfoylbnwqfwioys.supabase.co';
-const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1obWN2dmZveWxibndxZndpb3lzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5Mzc3NDUsImV4cCI6MjA5NDUxMzc0NX0.DJx01EDheWCjpq2nkdK0aljTmf9irfTugPhn_fTXSWM';
-
-const sb = createClient(SUPA_URL, SUPA_KEY);
-
-let currentUser = null;
+<script>
 let currentTab = 'home';
 let liveScores = {};
-let allFixtures = [];
 
-function toast(msg, color = '#00ff85') {
-  const div = document.createElement('div');
-  div.className = 'toast';
-  div.style.borderColor = color;
-  div.textContent = msg;
-  document.getElementById('toast-container').appendChild(div);
-  setTimeout(() => div.remove(), 4500);
+function toast(msg) {
+  alert(msg); // Rahisi kwa sasa
 }
+
+async function fetchLiveScores() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/447279/eventsday.php?d=${today}&s=Soccer`);
+    
+    if (res.ok) {
+      const data = await res.json();
+      const events = data.events || [];
+      
+      liveScores = {};
+      events.forEach(ev => {
+        if (!ev.strHomeTeam || !ev.strAwayTeam) return;
+        const key = `${ev.strHomeTeam} vs ${ev.strAwayTeam}`.toLowerCase();
+        
+        const status = (ev.strStatus || '').toLowerCase();
+        const isLive = ['live', '1h', '2h', 'ht', 'in progress'].some(s => status.includes(s)) || 
+                       (ev.intHomeScore !== null && ev.intAwayScore !== null);
+
+        liveScores[key] = {
+          home: ev.intHomeScore ?? '-',
+          away: ev.intAwayScore ?? '-',
+          minute: ev.strProgress || (isLive ? 'LIVE' : ''),
+          league: ev.strLeague || 'Unknown',
+          isLive: isLive
+        };
+      });
+    }
+    renderHome();
+  } catch(e) {
+    console.error(e);
+    document.getElementById('content').innerHTML = `<p style="color:red;padding:20px">Error: ${e.message}</p>`;
+  }
+}
+
+function renderHome() {
+  let html = `<h2 style="margin:15px 0">🔴 Live Scores</h2>`;
+  const liveMatches = Object.values(liveScores).filter(m => m.isLive);
+
+  if (liveMatches.length === 0) {
+    html += `<p style="text-align:center;padding:50px 20px;color:#4a7a5a">Hakuna mechi za live kwa sasa.<br><small>Inajaribu kila sekunde 30</small></p>`;
+  } else {
+    liveMatches.forEach(m => {
+      const key = Object.keys(liveScores).find(k => liveScores[k] === m);
+      html += `
+        <div class="card">
+          <small>${m.league}</small><br>
+          <strong>${key}</strong><br>
+          <span style="font-size:18px">${m.home} - ${m.away}</span>
+          <span style="float:right;color:#00ff85">${m.minute}</span>
+        </div>`;
+    });
+  }
+  document.getElementById('content').innerHTML = html;
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.nav-label').forEach(el => el.classList.remove('active'));
+  document.getElementById('nav-' + tab).classList.add('active');
+  if (tab === 'home') renderHome();
+}
+
+function initApp() {
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  
+  switchTab('home');
+  fetchLiveScores();
+  setInterval(fetchLiveScores, 30000);
+}
+
+// Anza App
+window.onload = initApp;
+</script>
 
 async function fetchLiveScores() {
   try {
