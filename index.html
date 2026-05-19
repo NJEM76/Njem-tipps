@@ -100,68 +100,142 @@ const MAX_MATCHES=6;
 const LOSS_STREAK_LIMIT=3;
 
 // ═══════════════════════════════════════
-// LIVE SCORES — API-Sports (Real-time)
+// MULTI-SOURCE LIVE SCORES & FIXTURES
+// Primary:   API-Football (api-sports.io) — accurate, Afrika coverage
+// Secondary: AllSports API               — free, backup
+// Tertiary:  TheSportsDB                 — fallback ya mwisho
 // ═══════════════════════════════════════
-let APISPORTS_KEY = localStorage.getItem('njem_apisports_key') || '';
-const SPORTSDB_KEY = '447279'; // TheSportsDB fallback
+let APISPORTS_KEY    = localStorage.getItem('njem_apisports_key')    || '';
+let ALLSPORTS_KEY    = localStorage.getItem('njem_allsports_key')    || '';
+const SPORTSDB_KEY   = '447279';
 
-// Map our league IDs to TheSportsDB league IDs
+// ── API-Football league IDs (api-sports.io) ──────────────────────────
+const APIFOOTBALL_LEAGUE_IDS = {
+  // Tanzania
+  'tpl':           741,   // Tanzania Premier League
+  'crdb_fed':      742,   // CRDB Federation Cup (Tanzania)
+  'mapinduzi':     743,   // Mapinduzi Cup Tanzania
+  // East Africa
+  'kpl':           357,   // Kenya Premier League
+  'uganda':        386,   // Uganda Premier League
+  'rwanda':        384,   // Rwanda National League
+  'zambia':        382,   // Zambia Super League
+  // West/Southern/North Africa
+  'npfl':          332,   // Nigeria Premier League
+  'psl':           288,   // South Africa PSL
+  'egypt':         233,   // Egyptian Premier League
+  'ghana':         363,   // Ghana Premier League
+  'ethiopia':      372,   // Ethiopian Premier League
+  'morocco':       200,   // Botola Pro Morocco
+  'senegal':       597,   // Ligue 1 Senegal
+  'cote':          193,   // Ligue 1 Côte d'Ivoire
+  'cameroon':      370,   // Elite One Cameroon
+  'angola':        378,   // Girabola Angola
+  'drc':           379,   // Linafoot DR Congo
+  'zimbabwe':      380,   // Zimbabwe Premier
+  // CAF
+  'caf_cl':        6,     // CAF Champions League
+  'caf_cc':        7,     // CAF Confederation Cup
+  'afcon':         8,     // Africa Cup of Nations
+  // Europe top
+  'epl':           39,
+  'laliga':        140,
+  'bundesliga':    78,
+  'seriea':        135,
+  'ligue1':        61,
+  'ucl':           2,
+  'uel':           3,
+  'uecl':          848,
+  'eredivisie':    88,
+  'primeira':      94,
+  'jupiler':       144,
+  'superlig':      203,
+  'championship':  40,
+  'scottish':      179,
+  'swiss':         207,
+  'austrian':      218,
+  'greek':         197,
+  'danish':        119,
+  'swedish':       113,
+  'norwegian':     103,
+  'czech':         345,
+  'romanian':      283,
+  'croatian':      210,
+  'serbian':       286,
+  'rpl':           235,
+  'ekstraklasa':   106,
+  'laliga2':       141,
+  'ligue2':        62,
+  'serie_b':       136,
+  '2bundesliga':   79,
+  'ukr':           333,
+  // Americas
+  'mls':           253,
+  'brasileirao':   71,
+  'liga_mx':       262,
+  'argentina':     128,
+  'colombia':      239,
+  'chile':         265,
+  'libertadores':  13,
+  'sudamericana':  11,
+  // Asia
+  'jleague':       98,
+  'kleague':       292,
+  'csl':           169,
+  'isl':           323,
+  'saudi':         307,
+  'uae':           435,
+  'qatar':         3001,
+  // International
+  'worldcup':      1,
+  'wcq_africa':    29,
+  'wcq_europe':    34,
+  'nations_league':5,
+  'friendly':      10,
+  'copa_am':       9,
+  'gold_cup':      16,
+};
+
+// ── AllSports API league IDs ──────────────────────────────────────────
+const ALLSPORTS_LEAGUE_IDS = {
+  'tpl':       1596,  // Tanzania Premier League
+  'crdb_fed':  2403,  // CRDB Federation Cup
+  'kpl':       1271,
+  'npfl':      762,
+  'psl':       501,
+  'egypt':     640,
+  'uganda':    1491,
+  'rwanda':    1478,
+  'zambia':    1467,
+  'ghana':     764,
+  'morocco':   640,
+  'caf_cl':    7,
+  'epl':       2,
+  'laliga':    6,
+  'bundesliga':4,
+  'seriea':    5,
+  'ligue1':    3,
+  'ucl':       1,
+  'mls':       107,
+  'brasileirao':23,
+};
+
+// ── TheSportsDB league IDs (fallback) ────────────────────────────────
 const LEAGUE_MAP = {
-  // EUROPE
-  'epl':          '4328',
-  'laliga':       '4335',
-  'bundesliga':   '4331',
-  'seriea':       '4332',
-  'ligue1':       '4334',
-  'ucl':          '4480',
-  'uel':          '4481',
-  'uecl':         '4882',
-  'eredivisie':   '4337',
-  'primeira':     '4344',
-  'jupiler':      '4367',
-  'superlig':     '4342',
-  'championship': '4329',
-  'scottish':     '4330',
-  'swiss':        '4355',
-  'austrian':     '4364',
-  'greek':        '4366',
-  'danish':       '4368',
-  'swedish':      '4345',
-  'norwegian':    '4346',
-  'czech':        '4360',
-  'romanian':     '4359',
-  'croatian':     '4362',
-  'serbian':      '4363',
-  'rpl':          '4361',
-  'ekstraklasa':  '4365',
-  // AFRICA
-  'tpl':          '4637',
-  'kpl':          '4391',
-  'npfl':         '4388',
-  'psl':          '4322',
-  'egypt':        '4354',
-  'caf':          '4483',
-  'ghana':        '4395',
-  'uganda':       '4396',
-  'rwanda':       '4397',
-  'zambia':       '4398',
-  'morocco':      '4399',
-  'ethiopia':     '4400',
-  // AMERICAS
-  'mls':          '4346',
-  'brasileirao':  '4351',
-  'liga_mx':      '4350',
-  'argentina':    '4406',
-  'colombia':     '4407',
-  'chile':        '4408',
-  // ASIA
-  'jleague':      '4356',
-  'kleague':      '4343',
-  'csl':          '4357',
-  'isl':          '4410',
-  'saudi':        '4349',
-  'uae':          '4411',
-  'qatar':        '4412',
+  'epl':'4328','laliga':'4335','bundesliga':'4331','seriea':'4332',
+  'ligue1':'4334','ucl':'4480','uel':'4481','uecl':'4882',
+  'eredivisie':'4337','primeira':'4344','jupiler':'4367','superlig':'4342',
+  'championship':'4329','scottish':'4330','swiss':'4355','austrian':'4364',
+  'greek':'4366','danish':'4368','swedish':'4345','norwegian':'4346',
+  'czech':'4360','romanian':'4359','croatian':'4362','serbian':'4363',
+  'rpl':'4361','ekstraklasa':'4365',
+  'tpl':'4637','kpl':'4391','npfl':'4388','psl':'4322','egypt':'4354',
+  'caf_cl':'4483','ghana':'4395','uganda':'4396','rwanda':'4397',
+  'zambia':'4398','morocco':'4399','ethiopia':'4400',
+  'mls':'4346','brasileirao':'4351','liga_mx':'4350',
+  'argentina':'4406','colombia':'4407','chile':'4408',
+  'jleague':'4356','kleague':'4343','csl':'4357','isl':'4410',
+  'saudi':'4349','uae':'4411','qatar':'4412',
 };
 
 let liveScores = {}; // { "Team A vs Team B": { home: 1, away: 0, minute: 67, status: "live" } }
@@ -170,158 +244,195 @@ let liveMinuteInterval = null; // for real-time minute counter
 let liveEnabled = false;
 let lastLiveFetch = 0; // timestamp of last fetch
 
-// Fetch live scores for today's matches
-// API-Sports fetch helper
-async function apiSportsFetch(endpoint) {
+// ═══════════════════════════════════════
+// API FETCH HELPERS — 3-source system
+// ═══════════════════════════════════════
+
+// ── 1. API-Football (api-sports.io) ──────────────────────────────────
+async function apifootballFetch(endpoint) {
   if (!APISPORTS_KEY) return null;
   try {
-    const url = `https://v3.football.api-sports.io${endpoint}`;
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'x-apisports-key': APISPORTS_KEY
-      }
-    });
-    if (!res.ok) {
-      console.warn('API-Sports HTTP error:', res.status, url);
-      return null;
-    }
+    const url = `https://v3.football.api-sports.io${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;
+    const res = await fetch(url, { headers: { 'x-apisports-key': APISPORTS_KEY } });
+    if (!res.ok) { console.warn('API-Football HTTP', res.status, url); return null; }
     const json = await res.json();
     if (json.errors && Object.keys(json.errors).length > 0) {
-      console.warn('API-Sports error response:', JSON.stringify(json.errors));
+      const errs = JSON.stringify(json.errors);
+      // rateLimit error — inform but don't crash
+      if (errs.includes('rateLimit') || errs.includes('requests')) {
+        console.warn('API-Football rate limit hit');
+        return { _rateLimit: true, response: [] };
+      }
+      console.warn('API-Football errors:', errs);
       return null;
     }
     return json;
-  } catch(e) {
-    console.warn('API-Sports fetch exception:', e.message);
-    return null;
-  }
+  } catch(e) { console.warn('API-Football exception:', e.message); return null; }
 }
-// apiSports() alias - used in fixture browser
-async function apiSports(endpoint) {
-  const ep = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
-  return apiSportsFetch(ep);
+// alias used in match details modal
+async function apiSportsFetch(endpoint) { return apifootballFetch(endpoint); }
+async function apiSports(endpoint)      { return apifootballFetch(endpoint); }
+
+// ── 2. AllSports API ─────────────────────────────────────────────────
+async function allsportsFetch(endpoint) {
+  if (!ALLSPORTS_KEY) return null;
+  try {
+    const base = 'https://apiv2.allsportsapi.com/football/';
+    const sep  = endpoint.includes('?') ? '&' : '?';
+    const url  = `${base}${endpoint}${sep}APIkey=${ALLSPORTS_KEY}`;
+    const res  = await fetch(url);
+    if (!res.ok) { console.warn('AllSports HTTP', res.status); return null; }
+    return await res.json();
+  } catch(e) { console.warn('AllSports exception:', e.message); return null; }
 }
 
+// ── 3. TheSportsDB (free, no key needed) ─────────────────────────────
+async function sportsdbFetch(path) {
+  try {
+    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/${path}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch(e) { return null; }
+}
+
+// ── Normalise a fixture from any source into a common scoreData object ─
+function normaliseApifootball(fix, nowMs) {
+  const home = fix.teams?.home?.name;
+  const away = fix.teams?.away?.name;
+  if (!home || !away) return null;
+  const elapsed    = fix.fixture?.status?.elapsed;
+  const statusShort= fix.fixture?.status?.short || 'NS';
+  const isLive     = ['1H','2H','HT','ET','BT','P','INT'].includes(statusShort);
+  const isFinished = ['FT','AET','PEN'].includes(statusShort);
+  let minuteDisplay = '', minuteNum = 0;
+  if (statusShort === 'HT') { minuteDisplay = 'HT'; minuteNum = 45; }
+  else if (isLive && elapsed) { minuteNum = elapsed; minuteDisplay = elapsed + "'"; }
+  else if (isFinished) { minuteDisplay = 'FT'; }
+  return {
+    home: fix.goals?.home ?? '-', away: fix.goals?.away ?? '-',
+    homeTeam: home, awayTeam: away,
+    homeLogo: fix.teams?.home?.logo || '', awayLogo: fix.teams?.away?.logo || '',
+    minute: minuteDisplay, minuteNum, status: statusShort,
+    statusLong: fix.fixture?.status?.long || '',
+    league: fix.league?.name || '', leagueLogo: fix.league?.logo || '',
+    country: fix.league?.country || '', fixtureId: fix.fixture?.id,
+    venue: fix.fixture?.venue?.name || '',
+    time: fix.fixture?.date ? new Date(fix.fixture.date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '',
+    date: fix.fixture?.date?.split('T')[0] || '',
+    fetchedAt: nowMs, isLive, isFinished,
+    isUpcoming: !isLive && !isFinished, _src: 'apifootball',
+  };
+}
+
+function normaliseAllsports(ev, nowMs) {
+  const home = ev.event_home_team;
+  const away = ev.event_away_team;
+  if (!home || !away) return null;
+  const st     = (ev.event_status || '').toString().trim();
+  const isLive = ['1H','2H','HT','ET','LIVE','In Progress'].includes(st) || (st !== '' && !isNaN(parseInt(st)));
+  const isFinished = ['Finished','FT','AET','After Penalties'].includes(st);
+  let minuteDisplay = '', minuteNum = 0;
+  if (st === 'HT') { minuteDisplay = 'HT'; minuteNum = 45; }
+  else if (isLive && !isNaN(parseInt(st))) { minuteNum = parseInt(st); minuteDisplay = minuteNum + "'"; }
+  else if (isLive) { minuteDisplay = 'LIVE'; }
+  else if (isFinished) { minuteDisplay = 'FT'; }
+  return {
+    home: ev.event_final_result ? ev.event_final_result.split(' - ')[0] : (ev.event_home_final_score ?? '-'),
+    away: ev.event_final_result ? ev.event_final_result.split(' - ')[1] : (ev.event_away_final_score ?? '-'),
+    homeTeam: home, awayTeam: away,
+    homeLogo: ev.home_team_logo || '', awayLogo: ev.away_team_logo || '',
+    minute: minuteDisplay, minuteNum, status: st,
+    league: ev.league_name || '', leagueLogo: ev.league_logo || '',
+    country: ev.country_name || '', fixtureId: ev.event_key,
+    venue: ev.event_stadium || '',
+    time: ev.event_time || '',
+    date: ev.event_date || '',
+    fetchedAt: nowMs, isLive, isFinished,
+    isUpcoming: !isLive && !isFinished, _src: 'allsports',
+  };
+}
+
+function normaliseSportsdb(ev, nowMs) {
+  if (!ev.strHomeTeam || !ev.strAwayTeam) return null;
+  const st = (ev.strStatus || '').trim();
+  const isLive = ['1H','2H','HT','ET','In Progress','Live','LIVE','Extra Time','Penalties','INT'].includes(st);
+  const isFinished = ['FT','AET','PEN','Match Finished','Full Time','After Extra Time'].includes(st)
+                    || st.startsWith('FT') || st.startsWith('AET');
+  let minuteDisplay = '', minuteNum = 0;
+  if (st === 'HT') { minuteDisplay = 'HT'; minuteNum = 45; }
+  else if (isLive && ev.strProgress) {
+    const prog = ev.strProgress.toString().trim();
+    minuteNum = parseInt(prog.split('+')[0]) || 0;
+    minuteDisplay = prog + "'";
+  } else if (isLive) { minuteDisplay = 'LIVE'; }
+  else if (isFinished) { minuteDisplay = 'FT'; }
+  const today = new Date().toISOString().split('T')[0];
+  return {
+    home: ev.intHomeScore ?? '-', away: ev.intAwayScore ?? '-',
+    homeTeam: ev.strHomeTeam, awayTeam: ev.strAwayTeam,
+    minute: minuteDisplay, minuteNum, status: st,
+    league: ev.strLeague || '', country: ev.strCountry || '',
+    fixtureId: ev.idEvent,
+    time: ev.strTime ? ev.strTime.slice(0,5) : '',
+    date: ev.dateEvent || today,
+    fetchedAt: nowMs, isLive, isFinished,
+    isUpcoming: !isLive && !isFinished, _src: 'sportsdb',
+  };
+}
+
+function ingestScoreData(scoreData) {
+  if (!scoreData) return;
+  const k1 = `${scoreData.homeTeam} vs ${scoreData.awayTeam}`.toLowerCase();
+  const k2 = `${scoreData.awayTeam} vs ${scoreData.homeTeam}`.toLowerCase();
+  // API-Football data wins over lower-quality sources
+  const existing = liveScores[k1];
+  if (existing && existing._src === 'apifootball' && scoreData._src !== 'apifootball') return;
+  liveScores[k1] = scoreData;
+  liveScores[k2] = scoreData;
+}
+
+// ═══════════════════════════════════════
+// LIVE SCORES — fetch from all 3 sources
+// ═══════════════════════════════════════
 async function fetchLiveScores() {
-  // PRIMARY: TheSportsDB (FREE, no key needed) — inafanya kazi kila wakati
-  await fetchLiveScoresFree();
+  const nowMs = Date.now();
+  const todayStr = new Date().toISOString().split('T')[0];
 
-  // BONUS: API-Sports kama ipo key — inaongeza data zaidi lakini si lazima
+  // ── Source 1: API-Football (primary, accurate) ────────────────────
   if (APISPORTS_KEY) {
-    await fetchLiveScoresApiSports();
+    try {
+      const [liveData, todayData] = await Promise.all([
+        apifootballFetch('/fixtures?live=all'),
+        apifootballFetch(`/fixtures?date=${todayStr}&timezone=Africa/Dar_es_Salaam`),
+      ]);
+      const seen = new Set();
+      [...(liveData?.response || []), ...(todayData?.response || [])].forEach(fix => {
+        if (seen.has(fix.fixture?.id)) return;
+        seen.add(fix.fixture?.id);
+        ingestScoreData(normaliseApifootball(fix, nowMs));
+      });
+    } catch(e) { console.warn('API-Football live fetch:', e.message); }
   }
-}
 
-// TheSportsDB FREE — msingi wa livescores bila key
-async function fetchLiveScoresFree() {
+  // ── Source 2: AllSports API (secondary) ───────────────────────────
+  if (ALLSPORTS_KEY) {
+    try {
+      const res = await allsportsFetch(`?met=Fixtures&from=${todayStr}&to=${todayStr}`);
+      (res?.result || []).forEach(ev => ingestScoreData(normaliseAllsports(ev, nowMs)));
+    } catch(e) { console.warn('AllSports live fetch:', e.message); }
+  }
+
+  // ── Source 3: TheSportsDB (free fallback) ─────────────────────────
   try {
-    const today = new Date().toISOString().split('T')[0];
-    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsday.php?d=${today}&s=Soccer`);
-    if (!res.ok) return;
-    const data = await res.json();
-    const events = data.events || [];
-    const nowMs = Date.now();
-    events.forEach(ev => {
-      if (!ev.strHomeTeam || !ev.strAwayTeam) return;
-      const st = (ev.strStatus || '').trim();
-      const isLive = ['1H','2H','HT','ET','In Progress','Live','LIVE','Extra Time','Penalties'].includes(st) 
-                    || (st.includes('HT') || st === 'INT');
-      const isFinished = ['FT','AET','PEN','Match Finished','Full Time','After Extra Time'].includes(st)
-                        || st.startsWith('FT') || st.startsWith('AET');
-      
-      // Parse minute from strProgress — could be "45", "45+2", "HT", etc.
-      let minuteNum = 0;
-      let minuteDisplay = '';
-      if (st === 'HT') { minuteDisplay = 'HT'; minuteNum = 45; }
-      else if (isLive && ev.strProgress) {
-        const prog = ev.strProgress.toString().trim();
-        const base = parseInt(prog.split('+')[0]) || 0;
-        minuteNum = base;
-        minuteDisplay = prog.includes('+') ? prog + "'" : prog + "'";
-      } else if (isLive) { minuteDisplay = 'LIVE'; minuteNum = 0; }
-      else if (isFinished) { minuteDisplay = 'FT'; }
+    const data = await sportsdbFetch(`eventsday.php?d=${todayStr}&s=Soccer`);
+    (data?.events || []).forEach(ev => ingestScoreData(normaliseSportsdb(ev, nowMs)));
+  } catch(e) { console.warn('TheSportsDB live fetch:', e.message); }
 
-      const scoreData = {
-        home: ev.intHomeScore !== null ? ev.intHomeScore : '-',
-        away: ev.intAwayScore !== null ? ev.intAwayScore : '-',
-        homeTeam: ev.strHomeTeam,
-        awayTeam: ev.strAwayTeam,
-        minute: minuteDisplay,
-        minuteNum,
-        status: st,
-        league: ev.strLeague || '',
-        leagueLogo: ev.strLeagueBadge || '',
-        country: ev.strCountry || '',
-        fixtureId: ev.idEvent,
-        time: ev.strTime ? ev.strTime.slice(0,5) : '',
-        date: ev.dateEvent || today,
-        fetchedAt: nowMs,
-        isLive, isFinished,
-        isUpcoming: !isLive && !isFinished,
-      };
-      const k1 = `${ev.strHomeTeam} vs ${ev.strAwayTeam}`.toLowerCase();
-      const k2 = `${ev.strAwayTeam} vs ${ev.strHomeTeam}`.toLowerCase();
-      liveScores[k1] = scoreData;
-      liveScores[k2] = scoreData;
-    });
-    lastLiveFetch = Date.now();
-    await autoSettleMatches();
-    if (['results','mikeka','home'].includes(currentTab)) refreshLiveUI();
-    if (currentTab === 'home') renderLiveSection();
-    if (currentTab === 'fixtures') renderFixtures(el('content'));
-  } catch(e) {
-    console.log('TheSportsDB livescores error:', e.message);
-  }
-}
-
-// API-Sports BONUS — inaongeza data lakini haisimamishi app kama haipo
-async function fetchLiveScoresApiSports() {
-  try {
-    const liveData = await apiSportsFetch('/fixtures?live=all');
-    const today = new Date().toISOString().split('T')[0];
-    const todayData = await apiSportsFetch(`/fixtures?date=${today}`);
-    const allFixtures = [...(liveData?.response || []), ...(todayData?.response || [])];
-    const seen = new Set();
-    allFixtures.forEach(fix => {
-      if (seen.has(fix.fixture?.id)) return;
-      seen.add(fix.fixture?.id);
-      const home = fix.teams?.home?.name;
-      const away = fix.teams?.away?.name;
-      if (!home || !away) return;
-      const elapsed = fix.fixture?.status?.elapsed;
-      const statusShort = fix.fixture?.status?.short || 'NS';
-      const isLive = ['1H','2H','HT','ET','BT','P','INT'].includes(statusShort);
-      const isFinished = ['FT','AET','PEN'].includes(statusShort);
-      let minuteDisplay = '';
-      let minuteNum = 0;
-      if (isLive && elapsed) {
-        minuteNum = elapsed; minuteDisplay = elapsed + "'";
-        if (statusShort === 'HT') minuteDisplay = 'HT';
-      } else if (isFinished) { minuteDisplay = 'FT'; }
-      const scoreData = {
-        home: fix.goals?.home ?? '-', away: fix.goals?.away ?? '-',
-        homeTeam: home, awayTeam: away,
-        homeLogo: fix.teams?.home?.logo || '', awayLogo: fix.teams?.away?.logo || '',
-        minute: minuteDisplay, minuteNum, status: statusShort,
-        statusLong: fix.fixture?.status?.long || '',
-        league: fix.league?.name || '', leagueLogo: fix.league?.logo || '',
-        country: fix.league?.country || '', fixtureId: fix.fixture?.id,
-        venue: fix.fixture?.venue?.name || '',
-        time: fix.fixture?.date ? new Date(fix.fixture.date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '',
-        date: fix.fixture?.date?.split('T')[0] || today,
-        isLive, isFinished, isUpcoming: !isLive && !isFinished,
-        stats: fix.statistics || [],
-      };
-      const k1 = `${home} vs ${away}`.toLowerCase();
-      const k2 = `${away} vs ${home}`.toLowerCase();
-      liveScores[k1] = scoreData; liveScores[k2] = scoreData;
-    });
-    if (currentTab === 'home') renderLiveSection();
-    if (currentTab === 'fixtures') renderFixtures(el('content'));
-  } catch(e) {
-    console.log('API-Sports bonus error:', e.message);
-  }
+  lastLiveFetch = Date.now();
+  await autoSettleMatches();
+  if (['results','mikeka','home'].includes(currentTab)) refreshLiveUI();
+  if (currentTab === 'home') renderLiveSection();
+  if (currentTab === 'fixtures') renderFixtures(el('content'));
 }
 
 // Find score for a match by team names
@@ -1142,34 +1253,33 @@ async function showFixtureBrowser() {
   const ov = document.createElement('div');
   ov.className = 'modal-overlay';
   ov.id = 'fix-modal';
-  const regions = [...new Set(APISPORTS_LEAGUES.map(l => l.region))];
+  const regions = [...new Set(SPORTSDB_LEAGUES.map(l => l.region))];
+  let selDate = new Date().toISOString().split('T')[0];
+
   ov.innerHTML = `
     <div class="modal-box" style="max-height:88vh;overflow-y:auto">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
         <div>
           <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800">📅 Fixtures</div>
-          <div style="font-size:11px;color:var(--muted)">Chagua league → Ona mechi</div>
+          <div style="font-size:11px;color:var(--muted)">Chagua tarehe → Chagua ligi → Ona mechi</div>
         </div>
         <button onclick="document.getElementById('fix-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">×</button>
       </div>
-      <!-- Date selector -->
       <div style="display:flex;gap:6px;margin-bottom:1rem;overflow-x:auto;padding-bottom:4px">
         ${[0,1,2,3].map(d => {
-          const date = new Date(); date.setDate(date.getDate() + d);
-          const label = d===0?'Leo':d===1?'Kesho':date.toLocaleDateString('sw-TZ',{weekday:'short',day:'numeric'});
-          const val = date.toISOString().split('T')[0];
-          return `<button onclick="window._fixDate('${val}',this)" data-date="${val}"
+          const dt = new Date(); dt.setDate(dt.getDate() + d);
+          const label = d===0?'Leo':d===1?'Kesho':dt.toLocaleDateString('sw-TZ',{weekday:'short',day:'numeric'});
+          const val = dt.toISOString().split('T')[0];
+          return `<button onclick="window._fixDate('${val}')" data-date="${val}"
             style="padding:.4rem .85rem;border-radius:20px;border:1.5px solid ${d===0?'var(--accent)':'var(--border)'};background:${d===0?'rgba(0,255,133,.15)':'transparent'};color:${d===0?'var(--accent)':'var(--muted)'};font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap">
-            ${label}
-          </button>`;
+            ${label}</button>`;
         }).join('')}
       </div>
-      <!-- League list by region -->
       ${regions.map(r => `
         <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;margin-top:10px">${r}</div>
         <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px">
-          ${APISPORTS_LEAGUES.filter(l=>l.region===r).map(l => `
-            <button onclick="window._loadFixtures(${l.id},'${l.name}','${l.flag}')"
+          ${SPORTSDB_LEAGUES.filter(l=>l.region===r).map(l => `
+            <button onclick="window._loadFixtures('${l.id}')"
               style="display:flex;align-items:center;gap:10px;padding:.65rem .85rem;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;text-align:left;font-family:inherit">
               <span style="font-size:20px">${l.flag}</span>
               <span style="font-size:13px;font-weight:500">${l.name}</span>
@@ -1180,118 +1290,35 @@ async function showFixtureBrowser() {
   document.body.appendChild(ov);
   ov.onclick = (e) => { if(e.target===ov) ov.remove(); };
 
-  let selectedDate = new Date().toISOString().split('T')[0];
-  window._fixDate = (date, btn) => {
-    selectedDate = date;
+  window._fixDate = (date) => {
+    selDate = date; fixSelectedDate = date;
     document.querySelectorAll('[data-date]').forEach(b => {
       b.style.borderColor = b.dataset.date===date?'var(--accent)':'var(--border)';
-      b.style.background = b.dataset.date===date?'rgba(0,255,133,.15)':'transparent';
-      b.style.color = b.dataset.date===date?'var(--accent)':'var(--muted)';
+      b.style.background  = b.dataset.date===date?'rgba(0,255,133,.15)':'transparent';
+      b.style.color       = b.dataset.date===date?'var(--accent)':'var(--muted)';
     });
   };
 
-  window._loadFixtures = async (leagueId, leagueName, flag) => {
-    // Replace content with fixtures
+  window._loadFixtures = async (lgId) => {
+    const lg = SPORTSDB_LEAGUES.find(l => l.id === lgId);
+    if (!lg) return;
+    fixSelectedDate = selDate;
     const box = ov.querySelector('.modal-box');
     box.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem">
         <button onclick="document.getElementById('fix-modal').remove();showFixtureBrowser();" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:22px">←</button>
         <div>
-          <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800">${flag} ${leagueName}</div>
-          <div style="font-size:11px;color:var(--muted)" id="fix-date-label">Inapakia...</div>
+          <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800">${lg.flag} ${lg.name}</div>
+          <div style="font-size:11px;color:var(--muted)">${selDate}</div>
         </div>
         <button onclick="document.getElementById('fix-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;margin-left:auto">×</button>
       </div>
-      <div id="fix-list"><div class="center"><div class="spinner"></div></div></div>`;
-
-    const fl = document.getElementById('fix-list');
-    const dl = document.getElementById('fix-date-label');
-    if(dl) dl.textContent = selectedDate;
-
-    if (!APISPORTS_KEY) {
-      fl.innerHTML = `<div style="text-align:center;color:var(--muted);padding:2rem">
-        <div style="font-size:32px">🔑</div>
-        <div style="margin-top:8px;font-size:13px">Weka API-Sports key kwenye Admin kwanza</div>
-      </div>`; return;
-    }
-
-    // Show loading clearly
-    fl.innerHTML = `<div class="center"><div class="spinner"></div><div style="font-size:12px;color:var(--muted);margin-top:8px">Inapakia fixtures...</div></div>`;
-
-    const data = await apiSportsFetch(`/fixtures?league=${leagueId}&date=${selectedDate}&timezone=Africa/Dar_es_Salaam`);
-
-    if (!data) {
-      fl.innerHTML = `<div style="text-align:center;color:var(--muted);padding:2rem">
-        <div style="font-size:32px">❌</div>
-        <div style="margin-top:8px;font-size:13px;color:var(--danger)">API-Sports haikujibu</div>
-        <div style="font-size:11px;margin-top:6px">Angalia console (F12) kwa maelezo zaidi</div>
-        <div style="font-size:11px;margin-top:4px;color:var(--warn)">Key: ${APISPORTS_KEY.slice(0,8)}...</div>
-      </div>`; return;
-    }
-
-    const fixtures = data?.response || [];
-
-    if (!fixtures.length) {
-      fl.innerHTML = `<div style="text-align:center;color:var(--muted);padding:2rem">
-        <div style="font-size:32px">📅</div>
-        <div style="margin-top:8px">Hakuna mechi ${selectedDate}</div>
-      </div>`; return;
-    }
-
-    fl.innerHTML = fixtures.map(fix => {
-      const home = fix.teams?.home?.name;
-      const away = fix.teams?.away?.name;
-      const status = fix.fixture?.status?.short;
-      const elapsed = fix.fixture?.status?.elapsed;
-      const hg = fix.goals?.home;
-      const ag = fix.goals?.away;
-      const isLive = ['1H','HT','2H','ET','BT','P'].includes(status);
-      const isFT = ['FT','AET','PEN'].includes(status);
-      const time = fix.fixture?.date ? new Date(fix.fixture.date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '--:--';
-      const minute = elapsed ? `${elapsed}'` : status==='HT'?'HT':'';
-
-      return `
-        <div style="background:var(--surface);border:1px solid ${isLive?'rgba(255,68,68,.4)':'var(--border)'};border-radius:14px;padding:.85rem;margin-bottom:.6rem">
-          <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.5rem">
-            <div style="text-align:right">
-              <div style="font-size:13px;font-weight:600">${home}</div>
-            </div>
-            <div style="text-align:center;min-width:70px">
-              ${isLive ? `
-                <div style="font-size:20px;font-weight:800;color:var(--danger)">${hg??0} - ${ag??0}</div>
-                <div style="font-size:10px;color:var(--danger);animation:pulse 1s infinite">🔴 ${minute}</div>
-              ` : isFT ? `
-                <div style="font-size:20px;font-weight:800;color:var(--muted)">${hg??0} - ${ag??0}</div>
-                <div style="font-size:10px;color:var(--muted)">FT</div>
-              ` : `
-                <div style="font-size:16px;font-weight:700;color:var(--text)">${time}</div>
-                <div style="font-size:10px;color:var(--muted)">vs</div>
-              `}
-            </div>
-            <div style="text-align:left">
-              <div style="font-size:13px;font-weight:600">${away}</div>
-            </div>
-          </div>
-          <!-- Add to betslip button -->
-          ${!isFT ? `
-          <div style="margin-top:8px;display:flex;gap:6px">
-            <button onclick="window._addToBetslip('${home.replace(/'/g,"\'")} vs ${away.replace(/'/g,"\'")}','${leagueName}')"
-              style="flex:1;padding:.4rem;border-radius:10px;border:1px solid rgba(0,255,133,.3);background:rgba(0,255,133,.08);color:var(--accent);font-size:11px;font-weight:600;cursor:pointer">
-              ➕ Ongeza Betslip
-            </button>
-            ${isLive ? `<button onclick="window._showMatchDetails('${home.replace(/'/g,"\'")} vs ${away.replace(/'/g,"\'")}','${fix.fixture?.id}')" style="padding:.4rem .7rem;border-radius:10px;border:1px solid rgba(255,68,68,.3);background:rgba(255,68,68,.08);color:var(--danger);font-size:11px;cursor:pointer">📊 Stats</button>` : ''}
-          </div>` : ''}
-        </div>`;
-    }).join('');
+      <div id="fix-matches-out"><div class="center"><div class="spinner"></div></div></div>`;
+    await loadFixMatchesFree(lg);
   };
 
   window._addToBetslip = (teams, league) => {
-    // Add to post tab matches
-    if (pMatches.length >= MAX_MATCHES) {
-      toast(`Max mechi ${MAX_MATCHES}!`, 'err');
-      document.getElementById('fix-modal')?.remove();
-      return;
-    }
+    if (pMatches.length >= MAX_MATCHES) { toast(`Max mechi ${MAX_MATCHES}!`,'err'); document.getElementById('fix-modal')?.remove(); return; }
     const leagueObj = LEAGUES.find(l => l.name.toLowerCase().includes(league.toLowerCase().split(' ')[0]));
     const newMatch = { ...newM(), teams, league: leagueObj?.id || 'epl' };
     pMatches.push(newMatch);
@@ -1929,6 +1956,8 @@ let fixLeagueSearch = '';
 const SPORTSDB_LEAGUES = [
   // AFRICA — kwanza kwa watumiaji wetu
   {id:'tpl',       sportsdbId:'4637', name:'Tanzania Premier League',    flag:'🇹🇿', region:'Afrika'},
+  {id:'crdb_fed',  sportsdbId:'4637', name:'CRDB Federation Cup 🇹🇿',   flag:'🇹🇿', region:'Afrika'},
+  {id:'mapinduzi', sportsdbId:'4637', name:'Mapinduzi Cup Tanzania',     flag:'🇹🇿', region:'Afrika'},
   {id:'kpl',       sportsdbId:'4391', name:'Kenya Premier League',       flag:'🇰🇪', region:'Afrika'},
   {id:'psl',       sportsdbId:'4322', name:'South Africa PSL',           flag:'🇿🇦', region:'Afrika'},
   {id:'npfl',      sportsdbId:'4388', name:'Nigeria Premier League',     flag:'🇳🇬', region:'Afrika'},
@@ -2138,6 +2167,40 @@ function renderFixtures(c) {
   if (fixSelectedLeague) loadFixMatchesFree(fixSelectedLeague);
 }
 
+// ── Fixture card renderer (shared) ───────────────────────────────────
+function renderFixCard(home, away, isLive, isFT, hg, ag, minute, time, leagueId, showBetBtn) {
+  const safeH = (home||'').replace(/'/g,"\\'");
+  const safeA = (away||'').replace(/'/g,"\\'");
+  return `
+    <div style="background:var(--surface);border:1px solid ${isLive?'rgba(255,68,68,.4)':'var(--border)'};border-radius:14px;padding:.85rem;margin-bottom:.6rem">
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.5rem">
+        <div style="text-align:right"><div style="font-size:13px;font-weight:600">${home}</div></div>
+        <div style="text-align:center;min-width:75px">
+          ${isLive ? `
+            <div style="font-size:20px;font-weight:800;color:var(--danger)">${hg??0} - ${ag??0}</div>
+            <div style="font-size:10px;color:var(--danger);animation:pulse 1s infinite">🔴 ${minute||'LIVE'}</div>
+          ` : isFT ? `
+            <div style="font-size:20px;font-weight:800;color:var(--muted)">${hg??'-'} - ${ag??'-'}</div>
+            <div style="font-size:10px;color:var(--muted)">FT</div>
+          ` : `
+            <div style="font-size:16px;font-weight:700;color:var(--text)">${time||'--:--'}</div>
+            <div style="font-size:10px;color:var(--muted)">vs</div>
+          `}
+        </div>
+        <div style="text-align:left"><div style="font-size:13px;font-weight:600">${away}</div></div>
+      </div>
+      ${showBetBtn && !isFT && home && away ? `
+      <div style="margin-top:8px;display:flex;gap:6px">
+        <button onclick="window._fixAddBetslip('${safeH} vs ${safeA}','${leagueId}')"
+          style="flex:1;padding:.4rem;border-radius:10px;border:1px solid rgba(0,255,133,.3);background:rgba(0,255,133,.08);color:var(--accent);font-size:11px;font-weight:600;cursor:pointer">
+          ➕ Ongeza Betslip
+        </button>
+        ${isLive ? `<button onclick="window._showMatchDetails('${safeH} vs ${safeA}','')" style="padding:.4rem .7rem;border-radius:10px;border:1px solid rgba(255,68,68,.3);background:rgba(255,68,68,.08);color:var(--danger);font-size:11px;cursor:pointer">📊 Stats</button>` : ''}
+      </div>` : ''}
+    </div>`;
+}
+
+// ── Main fixture loader — tries 3 sources in order ────────────────────
 async function loadFixMatchesFree(league) {
   const out = el('fix-matches-out');
   if (!out) return;
@@ -2147,106 +2210,106 @@ async function loadFixMatchesFree(league) {
       <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:14px">${league.name}</span>
       <span style="font-size:11px;color:var(--muted)">${fixSelectedDate}</span>
     </div>
-    <div class="center"><div class="spinner"></div></div>`;
+    <div class="center"><div class="spinner"></div><div style="font-size:11px;color:var(--muted);margin-top:6px">Inatafuta kutoka vyanzo vya data...</div></div>`;
 
-  try {
-    // Pakia kutoka TheSportsDB — FREE, bila API key
-    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsday.php?d=${fixSelectedDate}&l=${league.sportsdbId}`);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    let matches = data.events || [];
+  let matches = [];   // normalised scoreData objects
+  let srcLabel = '';
 
-    // Kama TheSportsDB haina data kwa ligi hii, jaribu search kwa jina
-    if (!matches.length) {
-      const res2 = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsday.php?d=${fixSelectedDate}&s=Soccer`);
-      const data2 = await res2.json();
-      const leagueLow = league.name.toLowerCase();
-      matches = (data2.events || []).filter(ev =>
-        ev.strLeague?.toLowerCase().includes(leagueLow.split(' ')[0].toLowerCase())
-      );
+  // ── Source 1: API-Football ───────────────────────────────────────
+  if (APISPORTS_KEY) {
+    const lgId = APIFOOTBALL_LEAGUE_IDS[league.id];
+    if (lgId) {
+      try {
+        const data = await apifootballFetch(`/fixtures?league=${lgId}&date=${fixSelectedDate}&timezone=Africa/Dar_es_Salaam`);
+        if (data && !data._rateLimit && (data.response||[]).length > 0) {
+          const nowMs = Date.now();
+          matches = data.response.map(fix => normaliseApifootball(fix, nowMs)).filter(Boolean);
+          srcLabel = '⚡ API-Football';
+        }
+      } catch(e) { console.warn('fix src1:', e.message); }
     }
+  }
 
-    if (!matches.length) {
-      out.innerHTML = `
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
-          <span style="font-size:18px">${league.flag}</span>
-          <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:14px">${league.name}</span>
-        </div>
-        <div style="text-align:center;padding:2rem;color:var(--muted)">
-          <div style="font-size:36px">📅</div>
-          <div style="margin-top:8px;font-size:13px">Hakuna mechi tarehe ${fixSelectedDate}</div>
-          <div style="font-size:11px;margin-top:4px">Jaribu tarehe nyingine</div>
-        </div>`;
-      return;
+  // ── Source 2: AllSports API ──────────────────────────────────────
+  if (!matches.length && ALLSPORTS_KEY) {
+    const lgId = ALLSPORTS_LEAGUE_IDS[league.id];
+    if (lgId) {
+      try {
+        const data = await allsportsFetch(`?met=Fixtures&leagueId=${lgId}&from=${fixSelectedDate}&to=${fixSelectedDate}`);
+        if ((data?.result||[]).length > 0) {
+          const nowMs = Date.now();
+          matches = data.result.map(ev => normaliseAllsports(ev, nowMs)).filter(Boolean);
+          srcLabel = '🌐 AllSports';
+        }
+      } catch(e) { console.warn('fix src2:', e.message); }
     }
+  }
 
+  // ── Source 3: TheSportsDB (free fallback) ────────────────────────
+  if (!matches.length && league.sportsdbId) {
+    try {
+      const data = await sportsdbFetch(`eventsday.php?d=${fixSelectedDate}&l=${league.sportsdbId}`);
+      let evs = data?.events || [];
+      // secondary fallback: search all soccer then filter by league name
+      if (!evs.length) {
+        const data2 = await sportsdbFetch(`eventsday.php?d=${fixSelectedDate}&s=Soccer`);
+        const nameParts = league.name.toLowerCase().split(' ');
+        evs = (data2?.events || []).filter(ev =>
+          nameParts.some(p => p.length > 3 && ev.strLeague?.toLowerCase().includes(p))
+        );
+      }
+      if (evs.length > 0) {
+        const nowMs = Date.now();
+        matches = evs.map(ev => normaliseSportsdb(ev, nowMs)).filter(Boolean);
+        srcLabel = '📡 TheSportsDB';
+      }
+    } catch(e) { console.warn('fix src3:', e.message); }
+  }
+
+  // ── No data found ────────────────────────────────────────────────
+  if (!matches.length) {
+    const hasAnyKey = APISPORTS_KEY || ALLSPORTS_KEY;
     out.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem">
         <span style="font-size:18px">${league.flag}</span>
         <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:14px">${league.name}</span>
-        <span style="font-size:11px;color:var(--muted);margin-left:auto">${matches.length} mechi</span>
       </div>
-      ${matches.map(ev => {
-        const home = ev.strHomeTeam;
-        const away = ev.strAwayTeam;
-        const isLive = ['1H','2H','HT','ET','In Progress'].includes(ev.strStatus);
-        const isFT = ['FT','AET','PEN','Match Finished'].includes(ev.strStatus);
-        const hg = ev.intHomeScore;
-        const ag = ev.intAwayScore;
-        const time = ev.strTime ? ev.strTime.slice(0,5) : '--:--';
-
-        return `
-          <div style="background:var(--surface);border:1px solid ${isLive?'rgba(255,68,68,.4)':'var(--border)'};border-radius:14px;padding:.85rem;margin-bottom:.6rem">
-            <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.5rem">
-              <div style="text-align:right">
-                <div style="font-size:13px;font-weight:600">${home}</div>
-              </div>
-              <div style="text-align:center;min-width:70px">
-                ${isLive ? `
-                  <div style="font-size:20px;font-weight:800;color:var(--danger)">${hg??0} - ${ag??0}</div>
-                  <div style="font-size:10px;color:var(--danger);animation:pulse 1s infinite">🔴 LIVE ${ev.strProgress||''}</div>
-                ` : isFT ? `
-                  <div style="font-size:20px;font-weight:800;color:var(--muted)">${hg??'-'} - ${ag??'-'}</div>
-                  <div style="font-size:10px;color:var(--muted)">FT</div>
-                ` : `
-                  <div style="font-size:16px;font-weight:700;color:var(--text)">${time}</div>
-                  <div style="font-size:10px;color:var(--muted)">vs</div>
-                `}
-              </div>
-              <div style="text-align:left">
-                <div style="font-size:13px;font-weight:600">${away}</div>
-              </div>
-            </div>
-            ${!isFT && home && away ? `
-            <div style="margin-top:8px;display:flex;gap:6px">
-              <button onclick="window._fixAddBetslip('${home.replace(/'/g,"\\'")} vs ${away.replace(/'/g,"\\'")}','${league.id}')"
-                style="flex:1;padding:.4rem;border-radius:10px;border:1px solid rgba(0,255,133,.3);background:rgba(0,255,133,.08);color:var(--accent);font-size:11px;font-weight:600;cursor:pointer">
-                ➕ Ongeza Betslip
-              </button>
-            </div>` : ''}
-          </div>`;
-      }).join('')}`;
-
-    window._fixAddBetslip = (teams, lgId) => {
-      if (pMatches.length >= MAX_MATCHES) {
-        toast(`Max mechi ${MAX_MATCHES}!`, 'err');
-        return;
-      }
-      const newMatch = { ...newM(), teams, league: lgId };
-      pMatches.push(newMatch);
-      toast(`✅ ${teams} imeongezwa!`);
-      showTab('post');
-    };
-
-  } catch(e) {
-    out.innerHTML = `
       <div style="text-align:center;padding:2rem;color:var(--muted)">
-        <div style="font-size:32px">⚠️</div>
-        <div style="margin-top:8px;font-size:13px">Imeshindwa kupakia fixtures</div>
-        <div style="font-size:11px;margin-top:4px">Angalia internet yako</div>
-        <button onclick="window._fixPickLeague('${league.id}')" style="margin-top:12px;padding:.5rem 1.25rem;border-radius:10px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;cursor:pointer">🔄 Jaribu Tena</button>
+        <div style="font-size:36px">📅</div>
+        <div style="margin-top:8px;font-size:13px;font-weight:600">Hakuna mechi tarehe ${fixSelectedDate}</div>
+        <div style="font-size:11px;margin-top:6px;line-height:1.5">
+          ${!hasAnyKey
+            ? `⚠️ Ongeza <strong style="color:var(--warn)">API-Football key</strong> au <strong style="color:var(--warn)">AllSports key</strong> kwenye Admin kwa data sahihi zaidi (hasa ligi za Afrika na Tanzania)`
+            : `Ligi hii inaweza kuwa na mapumziko leo, au tarehe hii haina mechi zilizopangwa.`}
+        </div>
+        <button onclick="window._fixPickLeague('${league.id}')" style="margin-top:14px;padding:.5rem 1.25rem;border-radius:10px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;cursor:pointer">🔄 Jaribu Tena</button>
       </div>`;
+    return;
   }
+
+  // ── Render matches ───────────────────────────────────────────────
+  out.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;flex-wrap:wrap">
+      <span style="font-size:18px">${league.flag}</span>
+      <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:14px">${league.name}</span>
+      <span style="font-size:11px;color:var(--muted);margin-left:auto">${matches.length} mechi</span>
+      <span style="font-size:10px;color:var(--muted);background:rgba(0,0,0,.3);padding:.15rem .5rem;border-radius:8px">${srcLabel}</span>
+    </div>
+    ${matches.map(m => renderFixCard(
+      m.homeTeam, m.awayTeam,
+      m.isLive, m.isFinished,
+      m.home, m.away,
+      m.minute, m.time,
+      league.id, true
+    )).join('')}`;
+
+  window._fixAddBetslip = (teams, lgId) => {
+    if (pMatches.length >= MAX_MATCHES) { toast(`Max mechi ${MAX_MATCHES}!`, 'err'); return; }
+    const newMatch = { ...newM(), teams, league: lgId };
+    pMatches.push(newMatch);
+    toast(`✅ ${teams} imeongezwa!`);
+    showTab('post');
+  };
 }
 
 // FEED
@@ -2748,16 +2811,39 @@ async function renderAdmin(c){
       </div>`).join('')}
     </div>
     <div class="card" style="border-color:rgba(255,170,0,.3)">
-      <div style="font-size:12px;font-weight:700;color:var(--warn);margin-bottom:6px">⚡ API-Sports Key — BONUS (Si Lazima)</div>
-      <div style="font-size:11px;margin-bottom:8px;color:${APISPORTS_KEY?'var(--win)':'var(--muted)'}">
-        ${APISPORTS_KEY?'✅ Inaongeza live stats za API-Sports':'ℹ️ Bila key — Fixtures na Livescores zinafanya kazi (TheSportsDB bure)'}
+      <div style="font-size:12px;font-weight:700;color:var(--warn);margin-bottom:6px">⚡ API Keys — Live Data</div>
+
+      <!-- API-Football -->
+      <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:4px">1️⃣ API-Football (api-sports.io) — Primary</div>
+      <div style="font-size:11px;margin-bottom:6px;color:${APISPORTS_KEY?'var(--win)':'var(--muted)'}">
+        ${APISPORTS_KEY?`✅ Imeunganishwa — Tanzania, Afrika, Ulaya coverage`:'❌ Haijawekwa — Afrika coverage itakuwa mdogo'}
       </div>
-      <div style="font-size:10px;color:var(--muted);margin-bottom:8px;background:rgba(0,0,0,.3);padding:.5rem;border-radius:8px">
-        💡 Fixtures + Livescores + AI hazitegemei key hii — zinatumia TheSportsDB (bure). Key hii inaongeza live stats za ziada tu.
+      <div style="font-size:10px;color:var(--muted);margin-bottom:6px;background:rgba(0,0,0,.3);padding:.5rem;border-radius:8px">
+        💡 Free: 100 req/siku · CRDB Federation Cup ✅ · TPL ✅ · Live stats ✅<br>
+        Pata key: <a href="https://dashboard.api-sports.io" target="_blank" style="color:var(--warn)">dashboard.api-sports.io</a>
       </div>
-      <input class="inp" id="apisports-key" placeholder="Paste API-Sports key hapa (optional)..." style="margin-bottom:8px" value="${APISPORTS_KEY}"/>
-      <button onclick="window._saveApiSports()" class="btn-ghost" style="border-color:var(--warn);color:var(--warn);margin-bottom:8px">💾 Hifadhi API-Sports Key</button>
-      <div style="font-size:11px;color:var(--muted)">Pata key bure (100 req/siku): <a href="https://dashboard.api-sports.io" target="_blank" style="color:var(--warn)">dashboard.api-sports.io</a></div>
+      <input class="inp" id="apisports-key" placeholder="Paste API-Football key hapa..." style="margin-bottom:8px" value="${APISPORTS_KEY}"/>
+      <button onclick="window._saveApiSports()" class="btn-ghost" style="border-color:var(--warn);color:var(--warn);margin-bottom:14px">💾 Hifadhi API-Football Key</button>
+
+      <!-- AllSports -->
+      <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:4px">2️⃣ AllSports API — Secondary Backup</div>
+      <div style="font-size:11px;margin-bottom:6px;color:${ALLSPORTS_KEY?'var(--win)':'var(--muted)'}">
+        ${ALLSPORTS_KEY?`✅ Imeunganishwa — Inafanya kazi kama backup`:'ℹ️ Haijawekwa — Itasaidia kama API-Football imekwisha quota'}
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:6px;background:rgba(0,0,0,.3);padding:.5rem;border-radius:8px">
+        💡 Free tier inapatikana · Afrika coverage nzuri · Backup reliable<br>
+        Pata key: <a href="https://allsportsapi.com" target="_blank" style="color:var(--info)">allsportsapi.com</a>
+      </div>
+      <input class="inp" id="allsports-key" placeholder="Paste AllSports API key hapa..." style="margin-bottom:8px" value="${ALLSPORTS_KEY}"/>
+      <button onclick="window._saveAllSports()" class="btn-ghost" style="border-color:var(--info);color:var(--info);margin-bottom:8px">💾 Hifadhi AllSports Key</button>
+
+      <!-- Status summary -->
+      <div style="font-size:10px;padding:.5rem;background:rgba(0,0,0,.3);border-radius:8px;margin-top:4px">
+        📊 Hali ya vyanzo: 
+        <span style="color:${APISPORTS_KEY?'var(--win)':'var(--danger)'}">API-Football ${APISPORTS_KEY?'✅':'❌'}</span> · 
+        <span style="color:${ALLSPORTS_KEY?'var(--win)':'var(--warn)'}">AllSports ${ALLSPORTS_KEY?'✅':'⚠️'}</span> · 
+        <span style="color:var(--win)">TheSportsDB ✅ (free)</span>
+      </div>
     </div>
     <div class="card" style="border-color:rgba(77,166,255,.3);margin-top:.75rem">
       <div style="font-size:12px;font-weight:700;color:var(--info);margin-bottom:6px">🤖 OpenRouter AI — Betslip OCR</div>
@@ -2774,8 +2860,14 @@ async function renderAdmin(c){
   window._saveApiSports=()=>{
     APISPORTS_KEY=el('apisports-key')?.value?.trim()||'';
     localStorage.setItem('njem_apisports_key',APISPORTS_KEY);
-    toast(APISPORTS_KEY?`✅ Key imehifadhiwa! (${APISPORTS_KEY.slice(0,8)}...)`:'Key ni empty','warn');
+    toast(APISPORTS_KEY?`✅ API-Football key imehifadhiwa!`:'Key ni empty','warn');
     if(APISPORTS_KEY) fetchLiveScores();
+    renderAdmin(c);
+  };
+  window._saveAllSports=()=>{
+    ALLSPORTS_KEY=el('allsports-key')?.value?.trim()||'';
+    localStorage.setItem('njem_allsports_key',ALLSPORTS_KEY);
+    toast(ALLSPORTS_KEY?`✅ AllSports key imehifadhiwa!`:'Key ni empty','warn');
     renderAdmin(c);
   };
   window._adSettle=async(mkId,newStatus,userId,potReturn,stake)=>{
