@@ -18,25 +18,28 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '11'
 
       - name: Weka Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Weka Mfumo wa APK
-        run: |
-          npm install -g @capacitor/cli @capacitor/core
-          npm install
-          npx cap init "76TIPPS" "com.tipps76.app" --web-dir=.
-          npx cap add android
+      - name: Weka NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '16'
 
-      - name: Compile APK
+      - name: Kutengeneza APK ya 76TIPPS
         run: |
-          npx cap sync
-          cd android && ./gradlew assembleDebug
+          npm install -g cordova
+          cordova create folder_app com.tipps76.app "76TIPPS"
+          cp -r * folder_app/www/ || true
+          cd folder_app
+          cordova platform add android
+          cordova build android --debug
 
       - name: Hifadhi APK
         uses: actions/upload-artifact@v4
         with:
           name: 76TIPPS-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: folder_app/platforms/android/app/build/outputs/apk/debug/app-debug.apk
+          
