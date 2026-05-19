@@ -30,8 +30,12 @@
     @keyframes slideIn{from{transform:translateX(60px);opacity:0}to{transform:translateX(0);opacity:1}}
     @keyframes glow{0%,100%{box-shadow:0 0 20px #00ff8522}50%{box-shadow:0 0 40px #00ff8544}}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+    @keyframes ticker{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
     .fadeUp{animation:fadeUp .35s ease both}
     .glow{animation:glow 3s infinite}
+    .ticker-wrap{overflow:hidden;background:rgba(0,0,0,.5);border-bottom:1px solid var(--border);padding:.28rem 0;white-space:nowrap}
+    .ticker-inner{display:inline-block;animation:ticker 28s linear infinite;white-space:nowrap;font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.5px}
+    .ticker-inner:hover{animation-play-state:paused}
     #app{max-width:500px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:80px}
     .header{background:rgba(12,31,19,.97);border-bottom:1px solid var(--border);padding:.85rem 1.1rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
     .header-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--accent)}
@@ -462,13 +466,28 @@ function normaliseSportsdb(ev, nowMs) {
   } else if (isLive) { minuteDisplay = 'LIVE'; }
   else if (isFinished) { minuteDisplay = 'FT'; }
   const today = new Date().toISOString().split('T')[0];
+
+  // TheSportsDB returns time in UTC — convert to EAT (UTC+3) for Tanzania users
+  let timeStr = '';
+  if (ev.strTime) {
+    try {
+      const rawTime = ev.strTime.slice(0, 5); // "HH:MM"
+      const [hh, mm] = rawTime.split(':').map(Number);
+      const utcMins = hh * 60 + mm;
+      const eatMins = (utcMins + 180) % (24 * 60); // +3 hours
+      const eatH = Math.floor(eatMins / 60).toString().padStart(2, '0');
+      const eatM = (eatMins % 60).toString().padStart(2, '0');
+      timeStr = `${eatH}:${eatM}`;
+    } catch { timeStr = ev.strTime.slice(0, 5); }
+  }
+
   return {
     home: ev.intHomeScore ?? '-', away: ev.intAwayScore ?? '-',
     homeTeam: ev.strHomeTeam, awayTeam: ev.strAwayTeam,
     minute: minuteDisplay, minuteNum, status: st,
     league: ev.strLeague || '', country: ev.strCountry || '',
     fixtureId: ev.idEvent,
-    time: ev.strTime ? ev.strTime.slice(0,5) : '',
+    time: timeStr,
     date: ev.dateEvent || today,
     fetchedAt: nowMs, isLive, isFinished,
     isUpcoming: !isLive && !isFinished, _src: 'sportsdb',
@@ -512,7 +531,7 @@ async function fetchLiveScores() {
     } catch(e) { console.warn('API-Football live fetch:', e.message); }
   }
 
-  // ── Source 2: Sportmonks (secondary, 2-week free trial) ──────────
+  // ── Source 2: Sportmonks ──────────────────────────────────────────
   if (SPORTMONKS_KEY) {
     try {
       const smRes = await sportmonksFetch(`fixtures/date/${todayStr}?include=participants;scores;state;league`);
@@ -521,7 +540,7 @@ async function fetchLiveScores() {
     } catch(e) { console.warn('Sportmonks live fetch:', e.message); }
   }
 
-  // ── Source 3: AllSports API (tertiary) ───────────────────────────
+  // ── Source 3: AllSports API ───────────────────────────────────────
   if (ALLSPORTS_KEY) {
     try {
       const res = await allsportsFetch(`?met=Fixtures&from=${todayStr}&to=${todayStr}`);
@@ -529,11 +548,20 @@ async function fetchLiveScores() {
     } catch(e) { console.warn('AllSports live fetch:', e.message); }
   }
 
-  // ── Source 4: TheSportsDB (free fallback) ─────────────────────────
+  // ── Source 4: TheSportsDB — DAIMA tumia (free, inafanya kazi bila key)
+  // Hata kama API nyingine zipo, TheSportsDB inatoa live match data ya ziada
   try {
-    const data = await sportsdbFetch(`eventsday.php?d=${todayStr}&s=Soccer`);
+    const data = await sportsdbFetch(`eventslive.php`); // live matches endpoint
     (data?.events || []).forEach(ev => ingestScoreData(normaliseSportsdb(ev, nowMs)));
   } catch(e) { console.warn('TheSportsDB live fetch:', e.message); }
+
+  // ── Source 4b: TheSportsDB today — kama bado hakuna data ─────────
+  if (Object.keys(liveScores).length === 0) {
+    try {
+      const data = await sportsdbFetch(`eventsday.php?d=${todayStr}&s=Soccer`);
+      (data?.events || []).forEach(ev => ingestScoreData(normaliseSportsdb(ev, nowMs)));
+    } catch(e) { console.warn('TheSportsDB today fetch:', e.message); }
+  }
 
   lastLiveFetch = Date.now();
   await autoSettleMatches();
@@ -542,21 +570,38 @@ async function fetchLiveScores() {
   if (currentTab === 'fixtures') renderFixtures(el('content'));
 }
 
-// Find score for a match by team names
+// Find score for a match by team names — improved fuzzy matching
 function findScore(teamsStr) {
   if (!teamsStr) return null;
   const key = teamsStr.toLowerCase().trim();
-  // Direct match
+  // 1. Direct exact match
   if (liveScores[key]) return liveScores[key];
-  // Partial match
+
+  const parts = key.split(' vs ');
+  if (parts.length !== 2) return null;
+  const home = parts[0].trim();
+  const away = parts[1].trim();
+
+  // 2. Partial name match — check if stored key contains BOTH team name fragments
   for (const [k, v] of Object.entries(liveScores)) {
-    const parts = key.split(' vs ');
-    if (parts.length === 2) {
-      const home = parts[0].trim().toLowerCase();
-      const away = parts[1].trim().toLowerCase();
-      if (k.includes(home) || k.includes(away)) return v;
-    }
+    const kParts = k.split(' vs ');
+    if (kParts.length !== 2) continue;
+    const kHome = kParts[0].trim();
+    const kAway = kParts[1].trim();
+    // Match if first 4+ chars of team name match (handles abbreviated names)
+    const homeSlug = home.slice(0, 5);
+    const awaySlug = away.slice(0, 5);
+    if (
+      (kHome.includes(homeSlug) || home.includes(kHome.slice(0,5))) &&
+      (kAway.includes(awaySlug) || away.includes(kAway.slice(0,5)))
+    ) return v;
   }
+
+  // 3. Looser — at least one team matches strongly
+  for (const [k, v] of Object.entries(liveScores)) {
+    if (k.includes(home.slice(0,6)) || k.includes(away.slice(0,6))) return v;
+  }
+
   return null;
 }
 
@@ -567,14 +612,15 @@ async function autoSettleMatches() {
   
   for (const mk of pendingMikeka) {
     const matches = mk.matches || [];
-    let allSettled = true;
     let needsUpdate = false;
     
     for (const match of matches) {
       if (match.outcome !== 'PENDING') continue;
       
       const score = findScore(match.teams);
-      if (!score || !score.isFinished) { allSettled = false; continue; }
+      // Settle if: officially finished OR stale live (estimated to be over)
+      const isSettleable = score && (score.isFinished || score._staleLive);
+      if (!isSettleable) continue;
       
       // Determine outcome based on market and pick
       const outcome = determineOutcome(match, score);
@@ -582,9 +628,11 @@ async function autoSettleMatches() {
         await sb.from('matches').update({ outcome }).eq('id', match.id);
         match.outcome = outcome;
         needsUpdate = true;
-        toast(`✅ Auto: ${match.teams} — ${outcome}`, 'info');
-      } else {
-        allSettled = false;
+        // Per-match notification
+        const icon = outcome === 'WIN' ? '✅' : outcome === 'LOSS' ? '❌' : '⬜';
+        const msg = `${icon} ${match.teams}\n${match.market} · ${match.pick} → ${outcome}`;
+        showNotification(`${icon} Match ${outcome}`, msg, outcome === 'WIN' ? 'win' : outcome === 'LOSS' ? 'loss' : 'default');
+        toast(`${icon} ${match.teams.split(' vs ')[0]} — ${outcome}`, outcome==='WIN'?'ok':outcome==='LOSS'?'err':'info');
       }
     }
     
@@ -597,16 +645,24 @@ async function autoSettleMatches() {
         const allVoid = (freshMatches || []).every(m => m.outcome === 'VOID');
         const newStatus = hasLoss ? 'LOST' : allVoid ? 'VOID' : 'WON';
         await sb.from('mikeka').update({ status: newStatus }).eq('id', mk.id);
+        
+        const mkName = mk.name || `Mkeka #${mk.id.slice(-4)}`;
+        const wonCount = (freshMatches||[]).filter(m=>m.outcome==='WIN').length;
+        const total = freshMatches.length;
+
         if (newStatus === 'WON') {
           const gain = (mk.potential_return || 0) - (mk.stake || 0);
           await updateUser({ bankroll: currentUser.bankroll + gain });
-          // Push notification
-          showNotification('🎉 Mkeka Umeshinda!', `+TZS ${fmt(gain)} — ${mk.name}`);
-          toast(`🎉 AUTO WIN! +TZS ${fmt(gain)}`, 'ok');
+          showNotification('🎉 MKEKA UMESHINDA!', `${mkName}\n${wonCount}/${total} zimeshinda\n+TZS ${fmt(gain)}`, 'win');
+          toast(`🎉 MKEKA WON! +TZS ${fmt(gain)}`, 'ok');
         } else if (newStatus === 'LOST') {
-          showNotification('❌ Mkeka Umepoteza', mk.name || 'Mkeka');
+          showNotification('❌ Mkeka Umepoteza', `${mkName}\n${wonCount}/${total} zilishinda`, 'loss');
+          toast(`❌ Mkeka Imepotea — ${mkName}`, 'err');
+        } else {
+          showNotification('⬜ Mkeka VOID', mkName);
         }
         await loadData();
+        if (['home','mikeka','results'].includes(currentTab)) showTab(currentTab);
       }
     }
   }
@@ -655,14 +711,59 @@ function determineOutcome(match, score) {
   }
 }
 
-// Push notification
-function showNotification(title, body) {
+// ── Audio alert using Web Audio API (sauti ya notification) ──────────
+function playNotificationSound(type = 'default') {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const sequences = {
+      win:     [{f:523,t:0,d:.12},{f:659,t:.13,d:.12},{f:784,t:.26,d:.2}],
+      loss:    [{f:400,t:0,d:.15},{f:300,t:.18,d:.25}],
+      live:    [{f:440,t:0,d:.08},{f:440,t:.12,d:.08}],
+      default: [{f:520,t:0,d:.1},{f:660,t:.12,d:.1}],
+    };
+    const seq = sequences[type] || sequences.default;
+    seq.forEach(({f, t, d}) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = f;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.35, ctx.currentTime + t);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + d);
+      osc.start(ctx.currentTime + t);
+      osc.stop(ctx.currentTime + t + d + 0.05);
+    });
+    setTimeout(() => ctx.close(), 1500);
+  } catch(e) { /* AudioContext inaweza kuzuiwa kabla ya user interaction */ }
+}
+
+// Push notification — with sound + vibration
+function showNotification(title, body, soundType = 'default') {
+  // Sauti
+  playNotificationSound(soundType);
+  // Vibration for mobile
+  if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+
   if (!('Notification' in window)) return;
+  
+  const doNotify = () => {
+    try {
+      new Notification(title, {
+        body,
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        tag: title,
+        renotify: true,
+        silent: false,
+      });
+    } catch(e) { console.warn('Notification error:', e); }
+  };
+
   if (Notification.permission === 'granted') {
-    new Notification(title, { body, icon: '/icon-192.png' });
+    doNotify();
   } else if (Notification.permission !== 'denied') {
     Notification.requestPermission().then(p => {
-      if (p === 'granted') new Notification(title, { body, icon: '/icon-192.png' });
+      if (p === 'granted') doNotify();
     });
   }
 }
@@ -1037,14 +1138,17 @@ async function showMatchDetailsModal(teamsStr, eventId) {
       else lbl.textContent = teamsStr;
     }
 
-    // Fetch event details from TheSportsDB
+    // Fetch event details — try API-Sports first, then Sportmonks, then TheSportsDB
     try {
       let eventData = null;
       let timeline = [];
 
       if (eventId && APISPORTS_KEY) {
-        // Fetch live stats from API-Sports
-        const statsData = await apiSports(`fixtures/statistics?fixture=${eventId}`);
+        // API-Sports: live stats + timeline
+        const [statsData, eventsData] = await Promise.all([
+          apiSports(`fixtures/statistics?fixture=${eventId}`),
+          apiSports(`fixtures/events?fixture=${eventId}`),
+        ]);
         if (statsData?.response?.length >= 2) {
           const homeStats = statsData.response[0]?.statistics || [];
           const awayStats = statsData.response[1]?.statistics || [];
@@ -1053,9 +1157,37 @@ async function showMatchDetailsModal(teamsStr, eventId) {
           awayStats.forEach(s => { as[s.type] = s.value ?? 0; });
           eventData = { _apiStats: { hs, as } };
         }
-        // Also fetch events (goals, cards) for timeline
-        const eventsData = await apiSports(`fixtures/events?fixture=${eventId}`);
         timeline = eventsData?.response || [];
+
+      } else if (eventId && SPORTMONKS_KEY) {
+        // Sportmonks: fetch fixture with stats include
+        const smData = await sportmonksFetch(
+          `fixtures/${eventId}?include=statistics;events;participants;scores;state`
+        );
+        if (smData?.data) {
+          const fix = smData.data;
+          const homeParticipant = fix.participants?.find(p => p.meta?.location === 'home');
+          const awayParticipant = fix.participants?.find(p => p.meta?.location === 'away');
+          const homeId = homeParticipant?.id;
+          const awayId = awayParticipant?.id;
+          if (fix.statistics?.length) {
+            const hs = {}, as = {};
+            fix.statistics.forEach(stat => {
+              const bucket = stat.participant_id === homeId ? hs : as;
+              bucket[stat.type?.name || stat.type_id] = stat.data?.value ?? stat.value ?? 0;
+            });
+            eventData = { _apiStats: { hs, as } };
+          }
+          // Build timeline from events
+          timeline = (fix.events || []).map(ev => ({
+            time: { elapsed: ev.minute },
+            type: ev.type?.name || '',
+            detail: ev.detail?.name || '',
+            player: { name: ev.player_name || '' },
+            team: { name: ev.participant_id === homeId ? (homeParticipant?.name||'') : (awayParticipant?.name||'') },
+          }));
+        }
+
       } else if (eventId) {
         // TheSportsDB fallback
         try {
@@ -1440,32 +1572,56 @@ function startLiveScores() {
   if (liveInterval) return;
   liveEnabled = true;
   fetchLiveScores(); // Immediate first fetch
-  liveInterval = setInterval(() => {
-    fetchLiveScores();
+
+  // Poll every 60s normally; if live matches detected, poll every 30s
+  liveInterval = setInterval(async () => {
+    await fetchLiveScores();
     checkCashoutAlerts();
-  }, 30000); // Every 30 seconds for more real-time feel
+    // If live matches exist, schedule an extra fetch in 30s
+    const hasLive = Object.values(liveScores).some(s => s.isLive);
+    if (hasLive && !liveBoostTimeout) {
+      liveBoostTimeout = setTimeout(async () => {
+        liveBoostTimeout = null;
+        await fetchLiveScores();
+      }, 30000);
+    }
+  }, 60000);
 
   // Real-time minute counter — increments displayed minute every 60s based on fetchedAt
   liveMinuteInterval = setInterval(() => {
     const now = Date.now();
     let hasLive = false;
     Object.values(liveScores).forEach(s => {
-      if (!s.isLive || !s.fetchedAt || s.minuteNum <= 0 || s.status === 'HT') return;
+      if (!s.isLive || !s.fetchedAt || s.status === 'HT') return;
       hasLive = true;
-      // Estimate current minute: base minuteNum + elapsed seconds since fetch / 60
-      const elapsed = Math.floor((now - s.fetchedAt) / 60000);
-      const estimated = Math.min(s.minuteNum + elapsed, s.minuteNum <= 45 ? 45 : 90);
-      s._estimatedMinute = estimated;
+      // Estimate current minute based on time elapsed since fetch
+      if (s.minuteNum > 0) {
+        const elapsedMins = Math.floor((now - s.fetchedAt) / 60000);
+        const cap = s.minuteNum <= 45 ? 47 : 95; // allow stoppage time
+        s._estimatedMinute = Math.min(s.minuteNum + elapsedMins, cap);
+      }
+      // Mark stale if: estimated min >= 93 AND > 5 min since last fetch (was 15min — too long!)
+      // OR if > 120 minutes since fetch (match definitely over)
+      const minsSinceFetch = (now - s.fetchedAt) / 60000;
+      if (
+        (s._estimatedMinute >= 93 && minsSinceFetch > 5) ||
+        minsSinceFetch > 120
+      ) {
+        s._staleLive = true;
+      }
     });
     if (hasLive && currentTab === 'home') renderLiveSection();
-  }, 15000); // Update display every 15s
+  }, 20000); // Update display every 20s
 
-  console.log('✅ Live scores started — polling every 30s');
+  console.log('✅ Live scores started — polling every 60s, 30s when live');
 }
+
+let liveBoostTimeout = null;
 
 function stopLiveScores() {
   if (liveInterval) { clearInterval(liveInterval); liveInterval = null; }
   if (liveMinuteInterval) { clearInterval(liveMinuteInterval); liveMinuteInterval = null; }
+  if (liveBoostTimeout) { clearTimeout(liveBoostTimeout); liveBoostTimeout = null; }
   liveEnabled = false;
 }
 
@@ -1696,8 +1852,14 @@ async function loginUser(user){
   el('auth-screen').style.display='none';el('app').style.display='block';
   await loadData();startRealtime();renderShell();showTab('home');
   startLiveScores();
-  if('Notification' in window && Notification.permission==='default'){
-    Notification.requestPermission();
+  // Request notification permission proactively at login
+  if('Notification' in window && Notification.permission === 'default'){
+    setTimeout(() => {
+      Notification.requestPermission().then(p => {
+        if(p === 'granted') toast('🔔 Notifications zimewashwa!', 'ok');
+        else if(p === 'denied') toast('⚠️ Notifications zimezuiwa — washa kwenye browser settings', 'warn');
+      });
+    }, 2000); // slight delay so user sees the app first
   }
 }
 function logout(){
@@ -1847,6 +2009,11 @@ function renderShell(){
         <button class="logout-btn" onclick="window._logout()">⏻</button>
       </div>
     </div>
+    <div class="ticker-wrap">
+      <span class="ticker-inner">
+        &nbsp;&nbsp;&nbsp;📊 NJEM MABULA &nbsp;☎️ 0764674285 &nbsp;•&nbsp; 📊 NJEM MABULA &nbsp;☎️ 0764674285 &nbsp;•&nbsp; 📊 NJEM MABULA &nbsp;☎️ 0764674285 &nbsp;•&nbsp; 📊 NJEM MABULA &nbsp;☎️ 0764674285 &nbsp;•&nbsp; 📊 NJEM MABULA &nbsp;☎️ 0764674285 &nbsp;•&nbsp; 📊 NJEM MABULA &nbsp;☎️ 0764674285 &nbsp;•&nbsp;
+      </span>
+    </div>
     <div id="content" style="padding:1rem"></div>
     <nav class="bottom-nav">
       ${tabs.map(t=>`<button class="nav-btn" onclick="window._tab('${t.id}')"><span class="nav-icon inactive" id="ni-${t.id}">${t.icon}</span><span class="nav-label" id="nl-${t.id}">${t.label}</span></button>`).join('')}
@@ -1983,9 +2150,10 @@ function renderLiveSection() {
     seen.add(k); return true;
   });
 
-  const liveOnly = unique.filter(s => s.isLive);
+  const liveOnly = unique.filter(s => s.isLive && !s._staleLive);
+  const staleLive = unique.filter(s => s.isLive && s._staleLive); // treat as finished
   const upcoming = unique.filter(s => s.isUpcoming).slice(0, 6);
-  const finished = unique.filter(s => s.isFinished).slice(0, 4);
+  const finished = [...unique.filter(s => s.isFinished), ...staleLive].slice(0, 5);
 
   if (!unique.length) {
     sec.innerHTML = `
@@ -1993,7 +2161,10 @@ function renderLiveSection() {
         📅 Mechi za Leo
         <span style="margin-left:auto;font-size:10px;color:var(--muted);font-weight:400">Inapakia...</span>
       </div>
-      <div class="center"><div class="spinner"></div></div>`;
+      <div class="center"><div class="spinner"></div></div>
+      <div style="text-align:center;font-size:11px;color:var(--muted);margin-top:6px">Inafetch data kutoka TheSportsDB...</div>`;
+    // Trigger immediate fetch if not already loading
+    if (!liveInterval) fetchLiveScores();
     return;
   }
 
@@ -2015,7 +2186,10 @@ function renderLiveSection() {
     <div style="display:flex;flex-direction:column;gap:6px">
       ${displayMatches.map(s => {
         const displayMin = s.isLive 
-          ? (s.status === 'HT' ? 'HT' : s._estimatedMinute ? `~${s._estimatedMinute}'` : s.minute || 'LIVE')
+          ? (s.status === 'HT' ? '⏸ HT' 
+            : s._estimatedMinute 
+              ? `~${s._estimatedMinute}'` 
+              : s.minute || 'LIVE')
           : '';
         const safeHome = (s.homeTeam||'').replace(/'/g,"\\'");
         const safeAway = (s.awayTeam||'').replace(/'/g,"\\'");
@@ -2275,23 +2449,25 @@ function renderFixtures(c) {
 }
 
 // ── Fixture card renderer (shared) ───────────────────────────────────
-function renderFixCard(home, away, isLive, isFT, hg, ag, minute, time, leagueId, showBetBtn) {
+function renderFixCard(home, away, isLive, isFT, hg, ag, minute, time, leagueId, showBetBtn, fixtureId) {
   const safeH = (home||'').replace(/'/g,"\\'");
   const safeA = (away||'').replace(/'/g,"\\'");
+  // For upcoming: show time prominently; for live: show score+minute; for FT: show final score
+  const timeDisplay = time ? time : '--:--';
   return `
-    <div style="background:var(--surface);border:1px solid ${isLive?'rgba(255,68,68,.4)':'var(--border)'};border-radius:14px;padding:.85rem;margin-bottom:.6rem">
+    <div style="background:var(--surface);border:1px solid ${isLive?'rgba(255,68,68,.4)':'var(--border)'};border-radius:14px;padding:.85rem;margin-bottom:.6rem${isLive?';box-shadow:0 0 12px rgba(255,68,68,.15)':''}">
       <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.5rem">
         <div style="text-align:right"><div style="font-size:13px;font-weight:600">${home}</div></div>
-        <div style="text-align:center;min-width:75px">
+        <div style="text-align:center;min-width:80px">
           ${isLive ? `
             <div style="font-size:20px;font-weight:800;color:var(--danger)">${hg??0} - ${ag??0}</div>
-            <div style="font-size:10px;color:var(--danger);animation:pulse 1s infinite">🔴 ${minute||'LIVE'}</div>
+            <div style="font-size:10px;color:var(--danger);animation:pulse 1s infinite;font-weight:700">🔴 ${minute||'LIVE'}</div>
           ` : isFT ? `
             <div style="font-size:20px;font-weight:800;color:var(--muted)">${hg??'-'} - ${ag??'-'}</div>
-            <div style="font-size:10px;color:var(--muted)">FT</div>
+            <div style="font-size:10px;color:var(--muted);font-weight:700">✅ FT</div>
           ` : `
-            <div style="font-size:16px;font-weight:700;color:var(--text)">${time||'--:--'}</div>
-            <div style="font-size:10px;color:var(--muted)">vs</div>
+            <div style="font-size:17px;font-weight:800;color:var(--accent)">${timeDisplay}</div>
+            <div style="font-size:9px;color:var(--muted)">KICK-OFF</div>
           `}
         </div>
         <div style="text-align:left"><div style="font-size:13px;font-weight:600">${away}</div></div>
@@ -2302,7 +2478,7 @@ function renderFixCard(home, away, isLive, isFT, hg, ag, minute, time, leagueId,
           style="flex:1;padding:.4rem;border-radius:10px;border:1px solid rgba(0,255,133,.3);background:rgba(0,255,133,.08);color:var(--accent);font-size:11px;font-weight:600;cursor:pointer">
           ➕ Ongeza Betslip
         </button>
-        ${isLive ? `<button onclick="window._showMatchDetails('${safeH} vs ${safeA}','')" style="padding:.4rem .7rem;border-radius:10px;border:1px solid rgba(255,68,68,.3);background:rgba(255,68,68,.08);color:var(--danger);font-size:11px;cursor:pointer">📊 Stats</button>` : ''}
+        ${isLive ? `<button onclick="window._showMatchDetails('${safeH} vs ${safeA}','${fixtureId||''}')" style="padding:.4rem .7rem;border-radius:10px;border:1px solid rgba(255,68,68,.3);background:rgba(255,68,68,.08);color:var(--danger);font-size:11px;cursor:pointer">📊 Stats</button>` : ''}
       </div>` : ''}
     </div>`;
 }
@@ -2469,7 +2645,7 @@ async function loadFixMatchesFree(league) {
       m.isLive, m.isFinished,
       m.home, m.away,
       m.minute, m.time,
-      league.id, true
+      league.id, true, m.fixtureId
     )).join('')}`;
 
   window._fixAddBetslip = (teams, lgId) => {
