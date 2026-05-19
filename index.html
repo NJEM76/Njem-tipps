@@ -2,162 +2,639 @@
 <html lang="sw">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>NJEM Tipps v2.0</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes"/>
+  <title>NJEM Tipps v2.0 | Live Scores & Betting Tracker</title>
   <meta name="theme-color" content="#00ff85"/>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
   <style>
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    :root{
-      --bg:#05110a;--surface:#0c1f13;--border:#1a3522;
-      --accent:#00ff85;--text:#e4f0e8;--muted:#4a7a5a;
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
-    body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);min-height:100vh}
-    .header{background:rgba(12,31,19,.97);border-bottom:1px solid var(--border);padding:.85rem 1.1rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
-    .header-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--accent)}
-    .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:1rem;margin-bottom:.75rem}
-    .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:500px;background:rgba(12,31,19,.97);border-top:1px solid var(--border);display:flex;z-index:100}
-    .nav-btn{flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:.6rem .2rem}
-    .nav-label{font-size:9px;color:var(--muted)}
-    .nav-label.active{color:var(--accent);font-weight:700}
-    #toast-container{position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px}
-    .toast{padding:.7rem 1rem;border-radius:12px;font-weight:600;font-size:13px;max-width:260px;background:#0c1f13;border:1px solid var(--accent)}
-    .live-dot{width:9px;height:9px;background:#ff4444;border-radius:50%;display:inline-block;margin-right:6px;animation:pulse 1.5s infinite}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+    :root {
+      --bg: #05110a;
+      --surface: #0c1f13;
+      --border: #1a3522;
+      --accent: #00ff85;
+      --text: #e4f0e8;
+      --muted: #4a7a5a;
+      --danger: #ff5e5e;
+      --warning: #ffb347;
+    }
+
+    body {
+      background: var(--bg);
+      font-family: 'DM Sans', sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      padding-bottom: 70px;
+    }
+
+    /* Header */
+    .header {
+      background: rgba(12, 31, 19, 0.97);
+      border-bottom: 1px solid var(--border);
+      padding: 0.85rem 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(4px);
+    }
+    .header-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: var(--accent);
+    }
+    #bankroll-display {
+      background: rgba(0, 0, 0, 0.5);
+      padding: 6px 12px;
+      border-radius: 40px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 1rem;
+      margin-bottom: 0.9rem;
+      transition: 0.2s;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .match-title {
+      font-weight: 700;
+      font-size: 1rem;
+      margin: 0.3rem 0;
+    }
+    .score {
+      font-size: 1.7rem;
+      font-weight: 800;
+      letter-spacing: 2px;
+    }
+    .badge-live {
+      background: #ff4444;
+      padding: 2px 8px;
+      border-radius: 30px;
+      font-size: 0.7rem;
+      font-weight: bold;
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-icon {
+      background: none;
+      border: none;
+      color: var(--accent);
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button {
+      background: var(--accent);
+      color: #05110a;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 40px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: 0.2s;
+    }
+    button.secondary {
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+    }
+    .flex-between {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    input, select, textarea {
+      background: #0a1910;
+      border: 1px solid var(--border);
+      padding: 10px;
+      border-radius: 14px;
+      color: var(--text);
+      width: 100%;
+      margin-bottom: 12px;
+      font-family: inherit;
+    }
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 500px;
+      background: rgba(12, 31, 19, 0.97);
+      border-top: 1px solid var(--border);
+      display: flex;
+      z-index: 100;
+      backdrop-filter: blur(4px);
+    }
+    .nav-btn {
+      flex: 1;
+      background: none;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 0.6rem 0.2rem;
+    }
+    .nav-label {
+      font-size: 0.7rem;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .nav-label.active {
+      color: var(--accent);
+      font-weight: 700;
+    }
+    #toast-container {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .toast {
+      background: #0c1f13;
+      border-left: 4px solid var(--accent);
+      padding: 0.7rem 1rem;
+      border-radius: 14px;
+      font-weight: 500;
+      font-size: 0.8rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .live-dot {
+      width: 9px;
+      height: 9px;
+      background: #ff4444;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; transform: scale(1);}
+      50% { opacity: 0.3; transform: scale(0.9);}
+    }
+    hr {
+      border-color: var(--border);
+      margin: 10px 0;
+    }
+    .bet-item {
+      background: #0a1910;
+      border-radius: 16px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .text-accent {
+      color: var(--accent);
+    }
+    .text-muted {
+      color: var(--muted);
+    }
+    small {
+      font-size: 0.7rem;
+    }
   </style>
 </head>
 <body>
+
 <div id="toast-container"></div>
 
-<div id="loading-screen" style="min-height:100vh;background:#05110a;display:flex;flex-direction:column;align-items:center;justify-content:center">
-  <div style="font-family:'Syne',sans-serif;font-size:24px;color:#00ff85">NJEM TIPPS</div>
-  <p style="color:#4a7a5a;margin-top:10px">Inapakia mechi za live...</p>
+<div id="loading-screen" style="min-height:100vh; background:#05110a; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1rem;">
+  <div style="font-family:'Syne',sans-serif; font-size:28px; color:#00ff85">NJEM TIPPS</div>
+  <p style="color:#4a7a5a">Inapakia mechi za leo...</p>
+  <div class="live-dot" style="background:#00ff85"></div>
 </div>
 
-<div id="app" style="display:none;max-width:500px;margin:0 auto;min-height:100vh;padding-bottom:80px">
+<div id="app" style="display:none; max-width:500px; margin:0 auto; min-height:100vh;">
   <div class="header">
     <div class="header-title">NJEM TIPPS v2.0</div>
-    <div id="bankroll-display" style="background:rgba(0,0,0,.4);padding:6px 12px;border-radius:20px;font-size:13px">Bankroll: TZS 125,000</div>
+    <div id="bankroll-display">💵 Bankroll: TZS 0</div>
   </div>
-
-  <div id="content" style="padding:1rem"></div>
+  <div id="content" style="padding: 1rem;"></div>
 
   <div class="bottom-nav">
-    <button class="nav-btn" onclick="switchTab('home')"><span class="nav-label active" id="nav-home">Home</span></button>
-    <button class="nav-btn" onclick="switchTab('fixtures')"><span class="nav-label" id="nav-fixtures">Fixtures</span></button>
-    <button class="nav-btn" onclick="switchTab('mikeka')"><span class="nav-label" id="nav-mikeka">Mikeka Yangu</span></button>
-    <button class="nav-btn" onclick="switchTab('public')"><span class="nav-label" id="nav-public">Public</span></button>
+    <button class="nav-btn" onclick="switchTab('home')"><span class="nav-label active" id="nav-home">🏠 Home</span></button>
+    <button class="nav-btn" onclick="switchTab('fixtures')"><span class="nav-label" id="nav-fixtures">📅 Fixtures</span></button>
+    <button class="nav-btn" onclick="switchTab('mikeka')"><span class="nav-label" id="nav-mikeka">📋 Mikeka Yangu</span></button>
+    <button class="nav-btn" onclick="switchTab('public')"><span class="nav-label" id="nav-public">🌍 Public Tips</span></button>
   </div>
 </div>
 
 <script>
-let currentTab = 'home';
-let liveScores = {};
+  // ======================= GLOBALS =======================
+  let currentTab = 'home';
+  let liveScores = {};      // { "teamA vs teamB": { home, away, minute, league } }
+  let fixturesList = [];    // upcoming matches
+  let myBets = [];
+  let publicTips = [];
+  let bankroll = 125000;    // TZS
 
-function toast(msg) {
-  const t = document.createElement('div');
-  t.className = 'toast';
-  t.textContent = msg;
-  document.getElementById('toast-container').appendChild(t);
-  setTimeout(() => t.remove(), 3500);
-}
+  const API_KEY = "1";      // public TheSportsDB key (working)
+  
+  // Helper: toast
+  function toast(msg, isError = false) {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.style.borderLeftColor = isError ? '#ff5e5e' : '#00ff85';
+    t.textContent = msg;
+    document.getElementById('toast-container').appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+  }
 
-async function fetchLiveScores() {
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/447279/eventsday.php?d=${today}&s=Soccer`);
-    
-    if (res.ok) {
+  // Update bankroll UI
+  function updateBankrollUI() {
+    const brEl = document.getElementById('bankroll-display');
+    if (brEl) brEl.innerHTML = `💵 Bankroll: TZS ${bankroll.toLocaleString()}`;
+    localStorage.setItem('njembankroll', bankroll);
+  }
+
+  // Load data from localStorage
+  function loadLocalData() {
+    const savedBankroll = localStorage.getItem('njembankroll');
+    if (savedBankroll) bankroll = parseInt(savedBankroll, 10);
+    const savedBets = localStorage.getItem('njemMyBets');
+    if (savedBets) myBets = JSON.parse(savedBets);
+    const savedTips = localStorage.getItem('njemPublicTips');
+    if (savedTips) publicTips = JSON.parse(savedTips);
+    updateBankrollUI();
+  }
+
+  // Save bets
+  function saveMyBets() {
+    localStorage.setItem('njemMyBets', JSON.stringify(myBets));
+    if (currentTab === 'mikeka') renderMikeka();
+  }
+  function savePublicTips() {
+    localStorage.setItem('njemPublicTips', JSON.stringify(publicTips));
+    if (currentTab === 'public') renderPublic();
+  }
+
+  // =============== API: Live Scores & Fixtures ===============
+  async function fetchTodayData() {
+    try {
+      // Get today's date in Tanzania timezone (UTC+3)
+      const tzDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Dar_es_Salaam' });
+      const url = `https://www.thesportsdb.com/api/v1/json/${API_KEY}/eventsday.php?d=${tzDate}&s=Soccer`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const events = data.events || [];
-      
+
+      // Reset structures
       liveScores = {};
+      fixturesList = [];
 
-      events.forEach(ev => {
-        if (!ev.strHomeTeam || !ev.strAwayTeam) return;
+      for (const ev of events) {
+        if (!ev.strHomeTeam || !ev.strAwayTeam) continue;
+        const homeTeam = ev.strHomeTeam;
+        const awayTeam = ev.strAwayTeam;
+        const key = `${homeTeam} vs ${awayTeam}`;
+        const status = (ev.strStatus || "").toUpperCase();
+        const progress = (ev.strProgress || "").toUpperCase();
+        const homeScore = ev.intHomeScore !== null ? ev.intHomeScore : 0;
+        const awayScore = ev.intAwayScore !== null ? ev.intAwayScore : 0;
 
-        const key = `${ev.strHomeTeam} vs ${ev.strAwayTeam}`.toLowerCase().trim();
-        const status = (ev.strStatus || '').toUpperCase().trim();
-        const progress = (ev.strProgress || '').toUpperCase();
-
-        // Logic iliyoboreshwa sana
-        let isLive = false;
-        let minute = '';
-
-        if (status.includes('1H') || status.includes('2H') || status.includes('HT') || 
-            status.includes('ET') || status.includes('LIVE') || status.includes('IN PROGRESS') ||
-            progress.includes('1H') || progress.includes('2H')) {
-          isLive = true;
-          minute = ev.strProgress || 'LIVE';
-        }
-
-        const isFinished = status.includes('FT') || status.includes('AET') || 
-                          status.includes('PEN') || status.includes('FINISHED') || 
-                          status.includes('MATCH FINISHED');
+        // LIVE detection (robust)
+        const isLive = (status.includes("LIVE") || status.includes("IN PLAY") || 
+                        status.includes("1H") || status.includes("2H") || 
+                        progress.includes("1H") || progress.includes("2H") ||
+                        (progress.match(/\d+/g) && parseInt(progress) > 0 && parseInt(progress) < 95 && !status.includes("FT")));
+        const isFinished = (status.includes("FT") || status.includes("FINISHED") || status.includes("AET") || status.includes("PEN"));
 
         if (isLive && !isFinished) {
           liveScores[key] = {
-            home: ev.intHomeScore !== null ? ev.intHomeScore : 0,
-            away: ev.intAwayScore !== null ? ev.intAwayScore : 0,
-            minute: minute,
-            league: ev.strLeague || 'Unknown',
-            isLive: true
+            home: homeScore,
+            away: awayScore,
+            minute: progress || "LIVE",
+            league: ev.strLeague || "Soccer"
           };
         }
+        // Fixtures = not started / scheduled (status NS, null, or not live/finished)
+        const notStarted = (!isLive && !isFinished) || status.includes("NS") || status === "" || status.includes("SCHEDULED");
+        if (notStarted && ev.dateEvent) {
+          fixturesList.push({
+            home: homeTeam,
+            away: awayTeam,
+            time: ev.strTime || "TBD",
+            league: ev.strLeague || "Soccer",
+            date: ev.dateEvent
+          });
+        }
+      }
+      // sort fixtures by time (basic)
+      fixturesList.sort((a,b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
+      if (currentTab === 'home') renderHome();
+      if (currentTab === 'fixtures') renderFixtures();
+    } catch (err) {
+      console.error(err);
+      toast("⚠️ Imeshindwa kuunganisha API. Angalia intaneti.", true);
+      if (currentTab === 'home') renderHome(); // show empty state
+    }
+  }
+
+  // =============== RENDERING ===============
+  function renderHome() {
+    const container = document.getElementById('content');
+    if (!container) return;
+    let html = `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                  <h2><span class="live-dot"></span> Live Scores</h2>
+                  <button class="secondary" onclick="fetchTodayData()" style="padding:4px 10px;">🔄 Refresh</button>
+                </div>`;
+    const liveKeys = Object.keys(liveScores);
+    if (liveKeys.length === 0) {
+      html += `<div class="card" style="text-align:center; padding:2rem;">
+                ⚽ Hakuna mechi za live kwa sasa.<br/>
+                <small class="text-muted">Jaribu refresh baada ya dakika.</small>
+               </div>`;
+    } else {
+      liveKeys.forEach(key => {
+        const m = liveScores[key];
+        html += `<div class="card">
+                  <div class="card-header">
+                    <span>${m.league}</span>
+                    <span class="badge-live"><span class="live-dot" style="background:white;"></span> LIVE ${m.minute}</span>
+                  </div>
+                  <div class="match-title">${key}</div>
+                  <div class="score">${m.home}  -  ${m.away}</div>
+                </div>`;
       });
     }
-    
-    if (currentTab === 'home') renderHome();
-  } catch(e) {
-    console.error(e);
+    container.innerHTML = html;
   }
-}
 
-function renderHome() {
-  let html = `<h2 style="margin-bottom:15px"><span class="live-dot"></span> Live Scores</h2>`;
+  function renderFixtures() {
+    const container = document.getElementById('content');
+    if (!container) return;
+    let html = `<div class="flex-between" style="margin-bottom:1rem;"><h2>📅 Mechi za Leo</h2>
+                <button class="secondary" onclick="fetchTodayData()">Refresh</button></div>`;
+    if (fixturesList.length === 0) {
+      html += `<div class="card" style="text-align:center;">Hakuna mechi zilizopangwa kwa leo.</div>`;
+    } else {
+      fixturesList.forEach(f => {
+        html += `<div class="card">
+                  <div class="card-header"><span>${f.league}</span><span>🕒 ${f.time || '--:--'}</span></div>
+                  <div class="match-title">${f.home} vs ${f.away}</div>
+                  <div class="text-muted" style="font-size:0.75rem;">${f.date}</div>
+                  <button class="secondary" style="margin-top:8px; width:100%;" onclick='quickAddBet("${f.home} vs ${f.away}")'>➕ Weka dau</button>
+                </div>`;
+      });
+    }
+    container.innerHTML = html;
+  }
 
-  const liveKeys = Object.keys(liveScores);
+  // Quick add bet from fixture
+  window.quickAddBet = function(match) {
+    if (currentTab !== 'mikeka') switchTab('mikeka');
+    setTimeout(() => {
+      const matchInput = document.getElementById('betMatch');
+      if (matchInput) matchInput.value = match;
+      toast(`Bet slip: tayari kwa ${match}`);
+    }, 100);
+  };
 
-  if (liveKeys.length === 0) {
-    html += `<p style="text-align:center;padding:80px 20px;color:#4a7a5a">
-      Hakuna mechi za live kwa sasa 😔<br>
-      <small>Jaribu tena baada ya dakika chache</small>
-    </p>`;
-  } else {
-    liveKeys.forEach(key => {
-      const m = liveScores[key];
-      html += `
-        <div class="card">
-          <small style="color:#4a7a5a">${m.league}</small><br>
-          <strong>${key}</strong><br>
-          <span style="font-size:21px;font-weight:700">${m.home} - ${m.away}</span>
-          <span style="float:right;color:#00ff85;font-weight:700">${m.minute}</span>
-        </div>`;
+  function renderMikeka() {
+    const container = document.getElementById('content');
+    let totalStake = myBets.reduce((sum, b) => sum + (b.status === 'open' ? b.stake : 0), 0);
+    let potentialWin = myBets.reduce((sum, b) => {
+      if (b.status === 'open') return sum + (b.stake * b.odds);
+      return sum;
+    }, 0);
+    let html = `<div class="flex-between"><h2>📋 Mikeka Yangu</h2><button onclick="resetBets()" class="secondary" style="background:none;">🗑️ Reset</button></div>
+                <div class="card" style="background:#0a1910;">
+                  <div class="flex-between"><span>💰 Jumla ya Stake:</span><span class="text-accent">TZS ${totalStake.toLocaleString()}</span></div>
+                  <div class="flex-between"><span>🎯 Uwezekano wa kushinda:</span><span>TZS ${potentialWin.toLocaleString()}</span></div>
+                </div>
+                <div style="margin: 15px 0;">
+                  <button onclick="showAddBetForm()" style="width:100%;">+ Weka Dau Jipya</button>
+                </div>
+                <div id="addBetForm" style="display:none; background:var(--surface); border-radius:20px; padding:1rem; margin-bottom:1rem;">
+                  <input type="text" id="betMatch" placeholder="Mechi (eg. Yanga vs Simba)" />
+                  <input type="number" id="betOdds" placeholder="Odds (mfano 2.15)" step="0.01" />
+                  <input type="number" id="betStake" placeholder="Kiasi (TZS)" />
+                  <select id="betPrediction"><option>1 (Home)</option><option>X (Draw)</option><option>2 (Away)</option></select>
+                  <div class="flex-between" style="gap:10px;">
+                    <button onclick="addBet()" style="flex:1;">Hifadhi Dau</button>
+                    <button class="secondary" onclick="closeBetForm()" style="flex:1;">Ghairi</button>
+                  </div>
+                </div>
+                <div id="betsList">`;
+    if (myBets.length === 0) html += `<div class="card text-muted" style="text-align:center;">Hakuna mikeka bado. Weka dau! ✅</div>`;
+    else {
+      myBets.forEach((bet, idx) => {
+        const statusBadge = bet.status === 'open' ? '🟢 Open' : (bet.status === 'won' ? '🏆 WON' : '❌ Lost');
+        html += `<div class="bet-item">
+                  <div class="flex-between"><strong>${bet.match}</strong> <span class="text-accent">${bet.prediction}</span></div>
+                  <div class="flex-between">Odds: ${bet.odds} | Stake: TZS ${bet.stake.toLocaleString()}</div>
+                  <div class="flex-between">Win: TZS ${(bet.stake * bet.odds).toLocaleString()}</div>
+                  <div class="flex-between" style="margin-top:8px;">
+                    <span>${statusBadge}</span>
+                    <div>
+                      ${bet.status === 'open' ? `<button class="secondary" onclick="settleBet(${idx}, 'won')" style="margin-right:5px;">✔️ Shinda</button>
+                      <button class="secondary" onclick="settleBet(${idx}, 'lost')" style="background:#5a2a2a;">❌ Potea</button>` : ''}
+                      <button class="secondary" onclick="deleteBet(${idx})">🗑️</button>
+                    </div>
+                  </div>
+                </div>`;
+      });
+    }
+    html += `</div>`;
+    container.innerHTML = html;
+  }
+
+  window.showAddBetForm = () => {
+    const form = document.getElementById('addBetForm');
+    if (form) form.style.display = 'block';
+  };
+  window.closeBetForm = () => {
+    const form = document.getElementById('addBetForm');
+    if (form) form.style.display = 'none';
+  };
+  window.addBet = () => {
+    const match = document.getElementById('betMatch')?.value.trim();
+    const odds = parseFloat(document.getElementById('betOdds')?.value);
+    const stake = parseInt(document.getElementById('betStake')?.value);
+    const prediction = document.getElementById('betPrediction')?.value;
+    if (!match || isNaN(odds) || isNaN(stake) || stake <= 0 || odds <= 1) {
+      toast("Tafadhali jaza taarifa zote kwa usahihi (odds >1)", true);
+      return;
+    }
+    if (stake > bankroll) {
+      toast("Huna bankroll ya kutosha! punguza stake", true);
+      return;
+    }
+    // deduct stake
+    bankroll -= stake;
+    updateBankrollUI();
+    myBets.push({
+      match, odds, stake, prediction, status: 'open', date: new Date().toISOString()
     });
+    saveMyBets();
+    closeBetForm();
+    document.getElementById('betMatch').value = '';
+    document.getElementById('betOdds').value = '';
+    document.getElementById('betStake').value = '';
+    toast(`Dau limewekwa: ${match} - TZS ${stake.toLocaleString()}`);
+    if (currentTab === 'mikeka') renderMikeka();
+  };
+  window.settleBet = (idx, result) => {
+    const bet = myBets[idx];
+    if (!bet || bet.status !== 'open') return;
+    if (result === 'won') {
+      const winAmount = bet.stake * bet.odds;
+      bankroll += winAmount;
+      toast(`🎉 Umepata TZS ${winAmount.toLocaleString()} kutoka ${bet.match}`, false);
+      bet.status = 'won';
+    } else if (result === 'lost') {
+      bet.status = 'lost';
+      toast(`❌ Dau limepotea: ${bet.match}`, false);
+    }
+    updateBankrollUI();
+    saveMyBets();
+    if (currentTab === 'mikeka') renderMikeka();
+  };
+  window.deleteBet = (idx) => {
+    const bet = myBets[idx];
+    if (bet.status === 'open') {
+      // refund stake if still open
+      bankroll += bet.stake;
+      updateBankrollUI();
+      toast(`Stake ya TZS ${bet.stake} imerejeshwa.`, false);
+    }
+    myBets.splice(idx,1);
+    saveMyBets();
+    if (currentTab === 'mikeka') renderMikeka();
+  };
+  window.resetBets = () => {
+    if (confirm("Utapoteza mikeka yote na bankroll itarejeshwa kwa default (TZS 125,000)?")) {
+      myBets = [];
+      bankroll = 125000;
+      updateBankrollUI();
+      saveMyBets();
+      renderMikeka();
+      toast("Mikeka yote imefutwa, bankroll imerejeshwa.");
+    }};
+            
+               // Public Tips section
+  function renderPublic() {
+    const container = document.getElementById('content');
+    let html = `<div class="flex-between"><h2>🌍 Vidokezo vya Umma</h2>
+                <button onclick="showAddTipForm()" class="secondary">➕ Toa Shauri</button></div>
+                <div id="addTipForm" style="display:none; background:var(--surface); border-radius:20px; padding:1rem; margin:1rem 0;">
+                  <input type="text" id="tipMatch" placeholder="Mechi (eg. Man City vs Arsenal)" />
+                  <input type="text" id="tipPrediction" placeholder="Utabiri (eg. 1X, over 2.5, Yanga win)" />
+                  <input type="text" id="tipOdds" placeholder="Odds (hiari)" />
+                  <textarea id="tipReason" rows="2" placeholder="Sababu kwa nini..."></textarea>
+                  <div class="flex-between">
+                    <button onclick="addPublicTip()">Chapisha</button>
+                    <button class="secondary" onclick="closeTipForm()">Funga</button>
+                  </div>
+                </div>
+                <div id="tipsList">`;
+    if (publicTips.length === 0) html += `<div class="card text-muted" style="text-align:center;">Hakuna vidokezo bado. Kuwa wa kwanza kushiriki! 🔥</div>`;
+    else {
+      [...publicTips].reverse().forEach((tip, idx) => {
+        html += `<div class="card">
+                  <div class="flex-between"><strong>⚽ ${tip.match}</strong> <span class="text-accent">${tip.prediction}</span></div>
+                  <div>📊 Odds: ${tip.odds || 'N/A'} | 🕒 ${new Date(tip.date).toLocaleString()}</div>
+                  <div class="text-muted" style="margin-top:5px;">💡 ${tip.reason || "Hakuna maelezo"}</div>
+                  <div class="flex-between" style="margin-top:8px;"><small>🧑‍💻 ${tip.author || "Anonymous"}</small>
+                  <button class="secondary" onclick="likeTip(${idx})">❤️ ${tip.likes || 0}</button></div>
+                </div>`;
+      });
+    }
+    html += `</div>`;
+    container.innerHTML = html;
   }
-  document.getElementById('content').innerHTML = html;
-}
 
-function switchTab(tab) {
-  currentTab = tab;
-  document.querySelectorAll('.nav-label').forEach(el => el.classList.remove('active'));
-  const active = document.getElementById('nav-' + tab);
-  if (active) active.classList.add('active');
+  window.showAddTipForm = () => {
+    const f = document.getElementById('addTipForm');
+    if (f) f.style.display = 'block';
+  };
+  window.closeTipForm = () => {
+    const f = document.getElementById('addTipForm');
+    if (f) f.style.display = 'none';
+  };
+  window.addPublicTip = () => {
+    const match = document.getElementById('tipMatch')?.value.trim();
+    const prediction = document.getElementById('tipPrediction')?.value.trim();
+    const odds = document.getElementById('tipOdds')?.value.trim();
+    const reason = document.getElementById('tipReason')?.value.trim();
+    if (!match || !prediction) {
+      toast("Tafadhali jaza mechi na utabiri", true);
+      return;
+    }
+    publicTips.unshift({
+      match, prediction, odds: odds || '-', reason: reason || '', 
+      date: new Date().toISOString(), author: "NJEM User", likes: 0
+    });
+    savePublicTips();
+    closeTipForm();
+    document.getElementById('tipMatch').value = '';
+    document.getElementById('tipPrediction').value = '';
+    document.getElementById('tipReason').value = '';
+    toast("Shauri lako limechapishwa kwenye ukurasa wa Umma!");
+    if (currentTab === 'public') renderPublic();
+  };
+  window.likeTip = (idx) => {
+    const actualIdx = publicTips.length - 1 - idx; // because reversed display
+    if (publicTips[actualIdx]) {
+      publicTips[actualIdx].likes = (publicTips[actualIdx].likes || 0) + 1;
+      savePublicTips();
+      renderPublic();
+    }
+  };
 
-  if (tab === 'home') renderHome();
-  else document.getElementById('content').innerHTML = `<h2 style="padding:20px">${tab.toUpperCase()} - Inakuja hivi karibuni</h2>`;
-}
+  // =============== TAB NAVIGATION ===============
+  window.switchTab = (tab) => {
+    currentTab = tab;
+    document.querySelectorAll('.nav-label').forEach(el => el.classList.remove('active'));
+    const activeSpan = document.getElementById(`nav-${tab}`);
+    if (activeSpan) activeSpan.classList.add('active');
+    
+    if (tab === 'home') renderHome();
+    else if (tab === 'fixtures') renderFixtures();
+    else if (tab === 'mikeka') renderMikeka();
+    else if (tab === 'public') renderPublic();
+  };
 
-function initApp() {
-  document.getElementById('loading-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  
-  switchTab('home');
-  fetchLiveScores();
-  setInterval(fetchLiveScores, 25000);   // Refresh kila sekunde 25
-}
-
-window.onload = initApp;
+  // =============== INIT APP ===============
+  async function init() {
+    loadLocalData();
+    await fetchTodayData();
+    document.getElementById('loading-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    switchTab('home');
+    // Auto refresh every 30 seconds
+    setInterval(() => {
+      fetchTodayData();
+    }, 30000);
+  }
+  window.onload = init;
 </script>
 </body>
 </html>
