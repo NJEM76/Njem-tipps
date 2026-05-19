@@ -100,13 +100,14 @@ const MAX_MATCHES=6;
 const LOSS_STREAK_LIMIT=3;
 
 // ═══════════════════════════════════════
-// LIVE SCORES SYSTEM — TheSportsDB (Free)
+// LIVE SCORES — API-Sports (Real-time)
 // ═══════════════════════════════════════
-const SPORTSDB_KEY = '447279'; // Free tier key
+let APISPORTS_KEY = localStorage.getItem('njem_apisports_key') || '';
+const SPORTSDB_KEY = '447279'; // TheSportsDB fallback
 
 // Map our league IDs to TheSportsDB league IDs
 const LEAGUE_MAP = {
-  // EUROPE TOP
+  // EUROPE
   'epl':          '4328',
   'laliga':       '4335',
   'bundesliga':   '4331',
@@ -133,28 +134,6 @@ const LEAGUE_MAP = {
   'serbian':      '4363',
   'rpl':          '4361',
   'ekstraklasa':  '4365',
-  // EUROPE EXTRA
-  'ukraine':      '4372',
-  'armenia':      '4373',
-  'georgia':      '4374',
-  'kazakhstan':   '4375',
-  'azerbaijan':   '4376',
-  'belarus':      '4377',
-  'slovakia':     '4378',
-  'slovenia':     '4379',
-  'bulgarian':    '4369',
-  'hungarian':    '4370',
-  'albanian':     '4371',
-  'finnish':      '4380',
-  'irish':        '4381',
-  'welsh':        '4382',
-  'faroe':        '4383',
-  'luxemburg':    '4384',
-  'moldova':      '4385',
-  'northern_irl': '4386',
-  'israelipl':    '4387',
-  'cypriot':      '4389',
-  'maltese':      '4390',
   // AFRICA
   'tpl':          '4637',
   'kpl':          '4391',
@@ -168,30 +147,13 @@ const LEAGUE_MAP = {
   'zambia':       '4398',
   'morocco':      '4399',
   'ethiopia':     '4400',
-  'angola':       '4401',
-  'senegal':      '4402',
-  'ivory_coast':  '4403',
-  'cameroon':     '4404',
-  'algeria':      '4405',
-  'tunisia':      '4413',
-  'mozambique':   '4414',
-  'zimbabwe':     '4415',
-  'botswana':     '4416',
-  'namibia':      '4417',
   // AMERICAS
-  'mls':          '4480',
+  'mls':          '4346',
   'brasileirao':  '4351',
   'liga_mx':      '4350',
   'argentina':    '4406',
   'colombia':     '4407',
   'chile':        '4408',
-  'peru':         '4418',
-  'ecuador':      '4419',
-  'venezuela':    '4420',
-  'uruguay':      '4421',
-  'paraguay':     '4422',
-  'bolivia':      '4423',
-  'costa_rica':   '4424',
   // ASIA
   'jleague':      '4356',
   'kleague':      '4343',
@@ -200,90 +162,146 @@ const LEAGUE_MAP = {
   'saudi':        '4349',
   'uae':          '4411',
   'qatar':        '4412',
-  'iran':         '4425',
-  'iraq':         '4426',
-  'jordan':       '4427',
-  'thailand':     '4428',
-  'vietnam':      '4429',
-  'malaysia':     '4430',
-  'indonesia':    '4431',
-  'philippines':  '4432',
-  'singapore':    '4433',
-  'australia':    '4434',
 };
 
 let liveScores = {}; // { "Team A vs Team B": { home: 1, away: 0, minute: 67, status: "live" } }
 let liveInterval = null;
 let liveEnabled = false;
 
-// Fetch live scores + upcoming fixtures for today and tomorrow
+// Fetch live scores for today's matches
+// API-Sports fetch helper
+async function apiSportsFetch(endpoint) {
+  if (!APISPORTS_KEY) return null;
+  try {
+    const res = await fetch(`https://v3.football.api-sports.io${endpoint}`, {
+      headers: {
+        'x-rapidapi-key': APISPORTS_KEY,
+        'x-rapidapi-host': 'v3.football.api-sports.io'
+      }
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch(e) { return null; }
+}
+
 async function fetchLiveScores() {
   try {
+    if (!APISPORTS_KEY) {
+      // Fallback to TheSportsDB
+      await fetchLiveScoresFallback();
+      return;
+    }
+    // Fetch live matches
+    const liveData = await apiSportsFetch('/fixtures?live=all');
+    // Fetch today's fixtures
     const today = new Date().toISOString().split('T')[0];
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-    // Fetch today and tomorrow in parallel
-    const [res1, res2] = await Promise.all([
-      fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsday.php?d=${today}&s=Soccer`),
-      fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsday.php?d=${tomorrow}&s=Soccer`)
-    ]);
-    const [d1, d2] = await Promise.all([res1.json(), res2.json()]);
-    const events = [...(d1.events||[]), ...(d2.events||[])];
+    const todayData = await apiSportsFetch(`/fixtures?date=${today}`);
+
     const newScores = {};
-    events.forEach(ev => {
-      if (!ev.strHomeTeam || !ev.strAwayTeam) return;
-      const key1 = `${ev.strHomeTeam} vs ${ev.strAwayTeam}`.toLowerCase();
-      const key2 = `${ev.strAwayTeam} vs ${ev.strHomeTeam}`.toLowerCase();
-      // Parse minute from strProgress e.g "45'", "45+2'", or strStatus
-      let minute = '';
+    const allFixtures = [
+      ...(liveData?.response || []),
+      ...(todayData?.response || [])
+    ];
+
+    // Deduplicate by fixture id
+    const seen = new Set();
+    allFixtures.forEach(fix => {
+      if (seen.has(fix.fixture?.id)) return;
+      seen.add(fix.fixture?.id);
+
+      const home = fix.teams?.home?.name;
+      const away = fix.teams?.away?.name;
+      if (!home || !away) return;
+
+      const elapsed = fix.fixture?.status?.elapsed;
+      const statusShort = fix.fixture?.status?.short || 'NS';
+      const isLive = ['1H','2H','HT','ET','BT','P','INT'].includes(statusShort);
+      const isFinished = ['FT','AET','PEN'].includes(statusShort);
+
+      let minuteDisplay = '';
       let minuteNum = 0;
-      if (ev.strProgress && ev.strProgress.trim()) {
-        const rawProg = ev.strProgress.trim();
-        minute = rawProg.includes("'") ? rawProg : rawProg + "'";
-        minuteNum = parseInt(rawProg) || 0;
-      } else if (ev.strStatus === 'HT') {
-        minute = "HT";
-        minuteNum = 45;
-      } else if (ev.strStatus === '1H') {
-        minute = "1H";
-        minuteNum = 30;
-      } else if (ev.strStatus === '2H') {
-        minute = "2H";
-        minuteNum = 70;
-      } else if (ev.strStatus === 'ET') {
-        minute = "ET";
-        minuteNum = 105;
+      if (isLive && elapsed) {
+        minuteNum = elapsed;
+        minuteDisplay = elapsed + "'";
+        if (statusShort === 'HT') minuteDisplay = 'HT';
+        if (statusShort === 'ET') minuteDisplay = 'ET ' + elapsed + "'";
+      } else if (isFinished) {
+        minuteDisplay = 'FT';
       }
-      const isLive = ['1H','2H','HT','ET','LIVE'].includes(ev.strStatus);
-      const isFinished = ['FT','AET','PEN','FT_PEN'].includes(ev.strStatus);
+
       const scoreData = {
-        home: ev.intHomeScore !== null ? parseInt(ev.intHomeScore) : '-',
-        away: ev.intAwayScore !== null ? parseInt(ev.intAwayScore) : '-',
-        homeTeam: ev.strHomeTeam,
-        awayTeam: ev.strAwayTeam,
-        minute, minuteNum,
-        status: ev.strStatus || 'NS',
-        league: ev.strLeague || '',
-        leagueBadge: ev.strLeagueBadge || '',
-        eventId: ev.idEvent,
-        thumb: ev.strThumb || '',
-        venue: ev.strVenue || '',
-        time: ev.strTime || '',
-        date: ev.dateEvent || '',
+        home: fix.goals?.home ?? '-',
+        away: fix.goals?.away ?? '-',
+        homeTeam: home,
+        awayTeam: away,
+        homeLogo: fix.teams?.home?.logo || '',
+        awayLogo: fix.teams?.away?.logo || '',
+        minute: minuteDisplay,
+        minuteNum,
+        status: statusShort,
+        statusLong: fix.fixture?.status?.long || '',
+        league: fix.league?.name || '',
+        leagueLogo: fix.league?.logo || '',
+        country: fix.league?.country || '',
+        fixtureId: fix.fixture?.id,
+        venue: fix.fixture?.venue?.name || '',
+        time: fix.fixture?.date ? new Date(fix.fixture.date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '',
+        date: fix.fixture?.date?.split('T')[0] || today,
         isLive, isFinished,
         isUpcoming: !isLive && !isFinished,
-        homeForm: ev.strHomeFormGuide || '',
-        awayForm: ev.strAwayFormGuide || '',
+        // Stats stored separately
+        stats: fix.statistics || [],
       };
-      newScores[key1] = scoreData;
-      newScores[key2] = scoreData;
+
+      const k1 = `${home} vs ${away}`.toLowerCase();
+      const k2 = `${away} vs ${home}`.toLowerCase();
+      newScores[k1] = scoreData;
+      newScores[k2] = scoreData;
     });
+
     liveScores = newScores;
     await autoSettleMatches();
     if (['results','mikeka','home'].includes(currentTab)) refreshLiveUI();
     if (currentTab === 'home') renderLiveSection();
   } catch(e) {
-    console.log('Live scores fetch error:', e.message);
+    console.log('Live scores error:', e.message);
   }
+}
+
+// Fallback to TheSportsDB if no API key
+async function fetchLiveScoresFallback() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventsday.php?d=${today}&s=Soccer`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const events = data.events || [];
+    const newScores = {};
+    events.forEach(ev => {
+      if (!ev.strHomeTeam || !ev.strAwayTeam) return;
+      const isLive = ['1H','2H','HT','ET'].includes(ev.strStatus);
+      const isFinished = ['FT','AET','PEN'].includes(ev.strStatus);
+      const scoreData = {
+        home: ev.intHomeScore ?? '-',
+        away: ev.intAwayScore ?? '-',
+        homeTeam: ev.strHomeTeam,
+        awayTeam: ev.strAwayTeam,
+        minute: ev.strProgress || '',
+        minuteNum: parseInt(ev.strProgress) || 0,
+        status: ev.strStatus || 'NS',
+        league: ev.strLeague || '',
+        fixtureId: ev.idEvent,
+        time: ev.strTime || '',
+        date: ev.dateEvent || '',
+        isLive, isFinished,
+        isUpcoming: !isLive && !isFinished,
+      };
+      newScores[`${ev.strHomeTeam} vs ${ev.strAwayTeam}`.toLowerCase()] = scoreData;
+      newScores[`${ev.strAwayTeam} vs ${ev.strHomeTeam}`.toLowerCase()] = scoreData;
+    });
+    liveScores = newScores;
+    if (currentTab === 'home') renderLiveSection();
+  } catch(e) {}
 }
 
 // Find score for a match by team names
@@ -305,68 +323,55 @@ function findScore(teamsStr) {
 }
 
 // Auto-settle betslip matches that are finished
-// Uses ALL mikeka (allMikeka) so even viewers' watched mikeka get settled
 async function autoSettleMatches() {
   if (!currentUser) return;
-  // Only owners/analysts can settle (they own the bankroll)
-  if (currentUser.role !== 'owner' && currentUser.role !== 'analyst') return;
-
-  // Get all PENDING mikeka belonging to this user
-  const pendingMikeka = allMikeka.filter(m => m.status === 'PENDING' && m.user_id === currentUser.id);
-  let anySettled = false;
-
+  const pendingMikeka = mikeka.filter(m => m.status === 'PENDING');
+  
   for (const mk of pendingMikeka) {
     const matches = mk.matches || [];
+    let allSettled = true;
     let needsUpdate = false;
-
+    
     for (const match of matches) {
       if (match.outcome !== 'PENDING') continue;
-
+      
       const score = findScore(match.teams);
-      if (!score || !score.isFinished) continue;
-
+      if (!score || !score.isFinished) { allSettled = false; continue; }
+      
       // Determine outcome based on market and pick
       const outcome = determineOutcome(match, score);
       if (outcome) {
-        try {
-          await sb.from('matches').update({ outcome }).eq('id', match.id);
-          match.outcome = outcome;
-          needsUpdate = true;
-          toast(`✅ Auto-settle: ${match.teams.split(' vs ')[0]} — ${outcome}`, 'info');
-        } catch(e) { /* ignore */ }
+        await sb.from('matches').update({ outcome }).eq('id', match.id);
+        match.outcome = outcome;
+        needsUpdate = true;
+        toast(`✅ Auto: ${match.teams} — ${outcome}`, 'info');
+      } else {
+        allSettled = false;
       }
     }
-
+    
+    // Check if whole mkeka is settled
     if (needsUpdate) {
-      try {
-        const { data: freshMatches } = await sb.from('matches').select('*').eq('mkeka_id', mk.id);
-        const pending = (freshMatches||[]).filter(m=>m.outcome==='PENDING');
-        const hasLoss = (freshMatches||[]).some(m=>m.outcome==='LOSS');
-
-        // If there's already a LOSS, no need to wait — mkeka is LOST
-        if (hasLoss) {
-          await sb.from('mikeka').update({ status: 'LOST' }).eq('id', mk.id);
-          showNotification('❌ Mkeka Umepoteza', mk.name||'Mkeka');
-          toast(`❌ ${mk.name||'Mkeka'} imepoteza (auto)`, 'err');
-          anySettled = true;
-        } else if (pending.length === 0) {
-          // All matches settled, none lost
-          const allVoid = (freshMatches||[]).every(m=>m.outcome==='VOID');
-          const newStatus = allVoid ? 'VOID' : 'WON';
-          await sb.from('mikeka').update({ status: newStatus }).eq('id', mk.id);
-          if (newStatus === 'WON') {
-            const gain = (mk.potential_return||0) - (mk.stake||0);
-            if (gain > 0) await updateUser({ bankroll: currentUser.bankroll + gain });
-            showNotification('🎉 Mkeka Umeshinda!', `+TZS ${fmt(gain)} — ${mk.name}`);
-            toast(`🎉 AUTO WIN! +TZS ${fmt(gain)}`, 'ok');
-          }
-          anySettled = true;
+      const { data: freshMatches } = await sb.from('matches').select('*').eq('mkeka_id', mk.id);
+      const allDone = (freshMatches || []).every(m => m.outcome !== 'PENDING');
+      if (allDone) {
+        const hasLoss = (freshMatches || []).some(m => m.outcome === 'LOSS');
+        const allVoid = (freshMatches || []).every(m => m.outcome === 'VOID');
+        const newStatus = hasLoss ? 'LOST' : allVoid ? 'VOID' : 'WON';
+        await sb.from('mikeka').update({ status: newStatus }).eq('id', mk.id);
+        if (newStatus === 'WON') {
+          const gain = (mk.potential_return || 0) - (mk.stake || 0);
+          await updateUser({ bankroll: currentUser.bankroll + gain });
+          // Push notification
+          showNotification('🎉 Mkeka Umeshinda!', `+TZS ${fmt(gain)} — ${mk.name}`);
+          toast(`🎉 AUTO WIN! +TZS ${fmt(gain)}`, 'ok');
+        } else if (newStatus === 'LOST') {
+          showNotification('❌ Mkeka Umepoteza', mk.name || 'Mkeka');
         }
-      } catch(e) { /* ignore settle error */ }
+        await loadData();
+      }
     }
   }
-
-  if (anySettled) await loadData();
 }
 
 // Determine match outcome from score
@@ -776,42 +781,84 @@ async function showMatchDetailsModal(teamsStr, eventId) {
     let eventData = null;
     let timeline = [];
 
-    if (eventId) {
-      // Fetch event details
-      const res = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/lookupevent.php?id=${eventId}`);
-      const data = await res.json();
-      eventData = (data.events || [])[0];
-
-      // Fetch event timeline/stats
-      const res2 = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/eventstatistics.php?id=${eventId}`);
-      const data2 = await res2.json();
-      timeline = data2.eventstats || [];
+    if (eventId && API_SPORTS_KEY) {
+      // Fetch live stats from API-Sports
+      const statsData = await apiSports(`fixtures/statistics?fixture=${eventId}`);
+      if (statsData?.response?.length >= 2) {
+        const homeStats = statsData.response[0]?.statistics || [];
+        const awayStats = statsData.response[1]?.statistics || [];
+        const getStat = (arr, type) => arr.find(s => s.type === type)?.value ?? '—';
+        // Map to our stats object
+        const hs = {}, as = {};
+        homeStats.forEach(s => { hs[s.type] = s.value ?? 0; });
+        awayStats.forEach(s => { as[s.type] = s.value ?? 0; });
+        eventData = { _apiStats: { hs, as } };
+      }
+      // Also fetch events (goals, cards) for timeline
+      const eventsData = await apiSports(`fixtures/events?fixture=${eventId}`);
+      timeline = eventsData?.response || [];
+    } else if (eventId) {
+      // TheSportsDB fallback
+      try {
+        const res = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/lookupevent.php?id=${eventId}`);
+        const data = await res.json();
+        eventData = (data.events || [])[0];
+      } catch(e) {}
     }
 
     const s = score || {};
     const home = s.homeTeam || teamsStr.split(' vs ')[0];
     const away = s.awayTeam || teamsStr.split(' vs ')[1];
 
-    // Parse stats from eventData
-    const stats = {
-      possession_home: eventData?.intHomeShots ? Math.round(50 + (parseInt(eventData.intHomeShots||5) - parseInt(eventData.intAwayShots||5))*2) : 50,
-      possession_away: 0,
-      shots_home: eventData?.intHomeShots || '—',
-      shots_away: eventData?.intAwayShots || '—',
-      shots_on_home: eventData?.intHomeShotsOnTarget || '—',
-      shots_on_away: eventData?.intAwayShotsOnTarget || '—',
-      fouls_home: eventData?.intHomeFouls || '—',
-      fouls_away: eventData?.intAwayFouls || '—',
-      corners_home: eventData?.intHomeCorners || '—',
-      corners_away: eventData?.intAwayCorners || '—',
-      cards_home: (parseInt(eventData?.intHomeYellowCards||0) + parseInt(eventData?.intHomeRedCards||0)*2),
-      cards_away: (parseInt(eventData?.intAwayYellowCards||0) + parseInt(eventData?.intAwayRedCards||0)*2),
-      yellow_home: eventData?.intHomeYellowCards || 0,
-      yellow_away: eventData?.intAwayYellowCards || 0,
-      red_home: eventData?.intHomeRedCards || 0,
-      red_away: eventData?.intAwayRedCards || 0,
-    };
-    stats.possession_away = 100 - stats.possession_home;
+    // Parse stats - prefer API-Sports data
+    let stats;
+    if (eventData?._apiStats) {
+      const hs = eventData._apiStats.hs;
+      const as = eventData._apiStats.as;
+      const parsePct = (v) => parseInt((v||'50%').toString().replace('%','')) || 50;
+      const posHome = parsePct(hs['Ball Possession']);
+      stats = {
+        possession_home: posHome,
+        possession_away: 100 - posHome,
+        shots_home: hs['Total Shots'] || '—',
+        shots_away: as['Total Shots'] || '—',
+        shots_on_home: hs['Shots on Goal'] || '—',
+        shots_on_away: as['Shots on Goal'] || '—',
+        fouls_home: hs['Fouls'] || '—',
+        fouls_away: as['Fouls'] || '—',
+        corners_home: hs['Corner Kicks'] || '—',
+        corners_away: as['Corner Kicks'] || '—',
+        yellow_home: hs['Yellow Cards'] || 0,
+        yellow_away: as['Yellow Cards'] || 0,
+        red_home: hs['Red Cards'] || 0,
+        red_away: as['Red Cards'] || 0,
+        offsides_home: hs['Offsides'] || '—',
+        offsides_away: as['Offsides'] || '—',
+        saves_home: hs['Goalkeeper Saves'] || '—',
+        saves_away: as['Goalkeeper Saves'] || '—',
+      };
+    } else {
+      // TheSportsDB fallback stats
+      stats = {
+        possession_home: eventData?.intHomeShots ? Math.round(50 + (parseInt(eventData.intHomeShots||5) - parseInt(eventData.intAwayShots||5))*2) : 50,
+        possession_away: 0,
+        shots_home: eventData?.intHomeShots || '—',
+        shots_away: eventData?.intAwayShots || '—',
+        shots_on_home: eventData?.intHomeShotsOnTarget || '—',
+        shots_on_away: eventData?.intAwayShotsOnTarget || '—',
+        fouls_home: eventData?.intHomeFouls || '—',
+        fouls_away: eventData?.intAwayFouls || '—',
+        corners_home: eventData?.intHomeCorners || '—',
+        corners_away: eventData?.intAwayCorners || '—',
+        yellow_home: eventData?.intHomeYellowCards || 0,
+        yellow_away: eventData?.intAwayYellowCards || 0,
+        red_home: eventData?.intHomeRedCards || 0,
+        red_away: eventData?.intAwayRedCards || 0,
+        offsides_home: '—', offsides_away: '—',
+        saves_home: '—', saves_away: '—',
+      };
+      stats.possession_away = 100 - stats.possession_home;
+    }
 
     const statusColor = s.isLive ? 'var(--danger)' : s.isFinished ? 'var(--muted)' : 'var(--warn)';
     const statusText = s.isLive ? `🔴 LIVE ${s.minute||''}` : s.isFinished ? 'FT' : `🕐 ${s.time||''}`;
@@ -840,7 +887,7 @@ async function showMatchDetailsModal(teamsStr, eventId) {
       <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:10px">📊 Match Statistics</div>
 
       ${statRow('Possession', stats.possession_home+'%', stats.possession_away+'%', stats.possession_home)}
-      ${statRow('Shots', stats.shots_home, stats.shots_away, (()=>{const h=parseInt(stats.shots_home)||0,a=parseInt(stats.shots_away)||0,t=h+a;return t>0?Math.round(h/t*100):50;})())}
+      ${statRow('Shots', stats.shots_home, stats.shots_away, typeof stats.shots_home==='number'?Math.round(stats.shots_home/(parseInt(stats.shots_home)||1+parseInt(stats.shots_away)||1)*100):50)}
       ${statRow('Shots on Target', stats.shots_on_home, stats.shots_on_away, 50)}
       ${statRow('Corners', stats.corners_home, stats.corners_away, 50)}
       ${statRow('Fouls', stats.fouls_home, stats.fouls_away, 50)}
@@ -938,6 +985,218 @@ function generateMatchAI(score, stats) {
     </div>`).join('');
 }
 
+
+// ═══════════════════════════════════════
+// FIXTURE BROWSER
+// ═══════════════════════════════════════
+const APISPORTS_LEAGUES = [
+  // EUROPE
+  {id:39,  name:'Premier League',    flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', region:'Europe'},
+  {id:140, name:'La Liga',           flag:'🇪🇸', region:'Europe'},
+  {id:78,  name:'Bundesliga',        flag:'🇩🇪', region:'Europe'},
+  {id:135, name:'Serie A',           flag:'🇮🇹', region:'Europe'},
+  {id:61,  name:'Ligue 1',           flag:'🇫🇷', region:'Europe'},
+  {id:2,   name:'Champions League',  flag:'🏆', region:'Europe'},
+  {id:3,   name:'Europa League',     flag:'🔵', region:'Europe'},
+  {id:848, name:'Conference League', flag:'🟢', region:'Europe'},
+  {id:88,  name:'Eredivisie',        flag:'🇳🇱', region:'Europe'},
+  {id:94,  name:'Primeira Liga',     flag:'🇵🇹', region:'Europe'},
+  {id:144, name:'Belgian Pro League',flag:'🇧🇪', region:'Europe'},
+  {id:203, name:'Turkish Süper Lig', flag:'🇹🇷', region:'Europe'},
+  {id:40,  name:'Championship',      flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', region:'Europe'},
+  {id:179, name:'Scottish Prem',     flag:'🏴󠁧󠁢󠁳󠁣󠁴󠁿', region:'Europe'},
+  {id:207, name:'Swiss Super League',flag:'🇨🇭', region:'Europe'},
+  {id:218, name:'Austrian Bundesliga',flag:'🇦🇹', region:'Europe'},
+  {id:197, name:'Greek Super League',flag:'🇬🇷', region:'Europe'},
+  {id:119, name:'Danish Superliga',  flag:'🇩🇰', region:'Europe'},
+  {id:113, name:'Allsvenskan',       flag:'🇸🇪', region:'Europe'},
+  {id:103, name:'Eliteserien',       flag:'🇳🇴', region:'Europe'},
+  {id:345, name:'Czech First League',flag:'🇨🇿', region:'Europe'},
+  {id:283, name:'Liga 1 Romania',    flag:'🇷🇴', region:'Europe'},
+  {id:210, name:'HNL Croatia',       flag:'🇭🇷', region:'Europe'},
+  {id:286, name:'SuperLiga Serbia',  flag:'🇷🇸', region:'Europe'},
+  {id:235, name:'Russian Premier',   flag:'🇷🇺', region:'Europe'},
+  {id:106, name:'Ekstraklasa',       flag:'🇵🇱', region:'Europe'},
+  // AFRICA
+  {id:834, name:'Tanzania Premier',  flag:'🇹🇿', region:'Africa'},
+  {id:357, name:'Kenya Premier',     flag:'🇰🇪', region:'Africa'},
+  {id:332, name:'Nigeria Premier',   flag:'🇳🇬', region:'Africa'},
+  {id:288, name:'South Africa PSL',  flag:'🇿🇦', region:'Africa'},
+  {id:233, name:'Egyptian Premier',  flag:'🇪🇬', region:'Africa'},
+  {id:6,   name:'CAF Champions',     flag:'🌍', region:'Africa'},
+  {id:363, name:'Ghana Premier',     flag:'🇬🇭', region:'Africa'},
+  {id:387, name:'Uganda Premier',    flag:'🇺🇬', region:'Africa'},
+  {id:384, name:'Rwanda League',     flag:'🇷🇼', region:'Africa'},
+  {id:382, name:'Zambia Super',      flag:'🇿🇲', region:'Africa'},
+  {id:200, name:'Botola Morocco',    flag:'🇲🇦', region:'Africa'},
+  {id:372, name:'Ethiopian Premier', flag:'🇪🇹', region:'Africa'},
+  // AMERICAS
+  {id:253, name:'MLS USA',           flag:'🇺🇸', region:'Americas'},
+  {id:71,  name:'Brasileirao',       flag:'🇧🇷', region:'Americas'},
+  {id:262, name:'Liga MX',           flag:'🇲🇽', region:'Americas'},
+  {id:128, name:'Liga Argentina',    flag:'🇦🇷', region:'Americas'},
+  {id:239, name:'Liga BetPlay',      flag:'🇨🇴', region:'Americas'},
+  {id:265, name:'Primera Chile',     flag:'🇨🇱', region:'Americas'},
+  // ASIA
+  {id:98,  name:'J-League',          flag:'🇯🇵', region:'Asia'},
+  {id:292, name:'K-League',          flag:'🇰🇷', region:'Asia'},
+  {id:169, name:'Chinese Super',     flag:'🇨🇳', region:'Asia'},
+  {id:323, name:'Indian Super',      flag:'🇮🇳', region:'Asia'},
+  {id:307, name:'Saudi Pro League',  flag:'🇸🇦', region:'Asia'},
+  {id:435, name:'UAE Pro League',    flag:'🇦🇪', region:'Asia'},
+  {id:3001,name:'Qatar Stars',       flag:'🇶🇦', region:'Asia'},
+];
+
+async function showFixtureBrowser() {
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.id = 'fix-modal';
+  const regions = [...new Set(APISPORTS_LEAGUES.map(l => l.region))];
+  ov.innerHTML = `
+    <div class="modal-box" style="max-height:88vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800">📅 Fixtures</div>
+          <div style="font-size:11px;color:var(--muted)">Chagua league → Ona mechi</div>
+        </div>
+        <button onclick="document.getElementById('fix-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">×</button>
+      </div>
+      <!-- Date selector -->
+      <div style="display:flex;gap:6px;margin-bottom:1rem;overflow-x:auto;padding-bottom:4px">
+        ${[0,1,2,3].map(d => {
+          const date = new Date(); date.setDate(date.getDate() + d);
+          const label = d===0?'Leo':d===1?'Kesho':date.toLocaleDateString('sw-TZ',{weekday:'short',day:'numeric'});
+          const val = date.toISOString().split('T')[0];
+          return `<button onclick="window._fixDate('${val}',this)" data-date="${val}"
+            style="padding:.4rem .85rem;border-radius:20px;border:1.5px solid ${d===0?'var(--accent)':'var(--border)'};background:${d===0?'rgba(0,255,133,.15)':'transparent'};color:${d===0?'var(--accent)':'var(--muted)'};font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap">
+            ${label}
+          </button>`;
+        }).join('')}
+      </div>
+      <!-- League list by region -->
+      ${regions.map(r => `
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;margin-top:10px">${r}</div>
+        <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px">
+          ${APISPORTS_LEAGUES.filter(l=>l.region===r).map(l => `
+            <button onclick="window._loadFixtures(${l.id},'${l.name}','${l.flag}')"
+              style="display:flex;align-items:center;gap:10px;padding:.65rem .85rem;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;text-align:left;font-family:inherit">
+              <span style="font-size:20px">${l.flag}</span>
+              <span style="font-size:13px;font-weight:500">${l.name}</span>
+              <span style="margin-left:auto;color:var(--muted);font-size:16px">›</span>
+            </button>`).join('')}
+        </div>`).join('')}
+    </div>`;
+  document.body.appendChild(ov);
+  ov.onclick = (e) => { if(e.target===ov) ov.remove(); };
+
+  let selectedDate = new Date().toISOString().split('T')[0];
+  window._fixDate = (date, btn) => {
+    selectedDate = date;
+    document.querySelectorAll('[data-date]').forEach(b => {
+      b.style.borderColor = b.dataset.date===date?'var(--accent)':'var(--border)';
+      b.style.background = b.dataset.date===date?'rgba(0,255,133,.15)':'transparent';
+      b.style.color = b.dataset.date===date?'var(--accent)':'var(--muted)';
+    });
+  };
+
+  window._loadFixtures = async (leagueId, leagueName, flag) => {
+    // Replace content with fixtures
+    const box = ov.querySelector('.modal-box');
+    box.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem">
+        <button onclick="document.getElementById('fix-modal').remove();showFixtureBrowser();" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:22px">←</button>
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800">${flag} ${leagueName}</div>
+          <div style="font-size:11px;color:var(--muted)" id="fix-date-label">Inapakia...</div>
+        </div>
+        <button onclick="document.getElementById('fix-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;margin-left:auto">×</button>
+      </div>
+      <div id="fix-list"><div class="center"><div class="spinner"></div></div></div>`;
+
+    const fl = document.getElementById('fix-list');
+    const dl = document.getElementById('fix-date-label');
+    if(dl) dl.textContent = selectedDate;
+
+    if (!API_SPORTS_KEY) {
+      fl.innerHTML = `<div style="text-align:center;color:var(--muted);padding:2rem">
+        <div style="font-size:32px">🔑</div>
+        <div style="margin-top:8px;font-size:13px">Weka API-Sports key kwenye Admin kwanza</div>
+      </div>`; return;
+    }
+
+    const data = await apiSports(`fixtures?league=${leagueId}&date=${selectedDate}&timezone=Africa/Dar_es_Salaam`);
+    const fixtures = data?.response || [];
+
+    if (!fixtures.length) {
+      fl.innerHTML = `<div style="text-align:center;color:var(--muted);padding:2rem">
+        <div style="font-size:32px">📅</div>
+        <div style="margin-top:8px">Hakuna mechi ${selectedDate}</div>
+      </div>`; return;
+    }
+
+    fl.innerHTML = fixtures.map(fix => {
+      const home = fix.teams?.home?.name;
+      const away = fix.teams?.away?.name;
+      const status = fix.fixture?.status?.short;
+      const elapsed = fix.fixture?.status?.elapsed;
+      const hg = fix.goals?.home;
+      const ag = fix.goals?.away;
+      const isLive = ['1H','HT','2H','ET','BT','P'].includes(status);
+      const isFT = ['FT','AET','PEN'].includes(status);
+      const time = fix.fixture?.date ? new Date(fix.fixture.date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '--:--';
+      const minute = elapsed ? `${elapsed}'` : status==='HT'?'HT':'';
+
+      return `
+        <div style="background:var(--surface);border:1px solid ${isLive?'rgba(255,68,68,.4)':'var(--border)'};border-radius:14px;padding:.85rem;margin-bottom:.6rem">
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:.5rem">
+            <div style="text-align:right">
+              <div style="font-size:13px;font-weight:600">${home}</div>
+            </div>
+            <div style="text-align:center;min-width:70px">
+              ${isLive ? `
+                <div style="font-size:20px;font-weight:800;color:var(--danger)">${hg??0} - ${ag??0}</div>
+                <div style="font-size:10px;color:var(--danger);animation:pulse 1s infinite">🔴 ${minute}</div>
+              ` : isFT ? `
+                <div style="font-size:20px;font-weight:800;color:var(--muted)">${hg??0} - ${ag??0}</div>
+                <div style="font-size:10px;color:var(--muted)">FT</div>
+              ` : `
+                <div style="font-size:16px;font-weight:700;color:var(--text)">${time}</div>
+                <div style="font-size:10px;color:var(--muted)">vs</div>
+              `}
+            </div>
+            <div style="text-align:left">
+              <div style="font-size:13px;font-weight:600">${away}</div>
+            </div>
+          </div>
+          <!-- Add to betslip button -->
+          ${!isFT ? `
+          <div style="margin-top:8px;display:flex;gap:6px">
+            <button onclick="window._addToBetslip('${home.replace(/'/g,"\'")} vs ${away.replace(/'/g,"\'")}','${leagueName}')"
+              style="flex:1;padding:.4rem;border-radius:10px;border:1px solid rgba(0,255,133,.3);background:rgba(0,255,133,.08);color:var(--accent);font-size:11px;font-weight:600;cursor:pointer">
+              ➕ Ongeza Betslip
+            </button>
+            ${isLive ? `<button onclick="window._showMatchDetails('${home.replace(/'/g,"\'")} vs ${away.replace(/'/g,"\'")}','${fix.fixture?.id}')" style="padding:.4rem .7rem;border-radius:10px;border:1px solid rgba(255,68,68,.3);background:rgba(255,68,68,.08);color:var(--danger);font-size:11px;cursor:pointer">📊 Stats</button>` : ''}
+          </div>` : ''}
+        </div>`;
+    }).join('');
+  };
+
+  window._addToBetslip = (teams, league) => {
+    // Add to post tab matches
+    if (pMatches.length >= MAX_MATCHES) {
+      toast(`Max mechi ${MAX_MATCHES}!`, 'err');
+      document.getElementById('fix-modal')?.remove();
+      return;
+    }
+    const leagueObj = LEAGUES.find(l => l.name.toLowerCase().includes(league.toLowerCase().split(' ')[0]));
+    const newMatch = { ...newM(), teams, league: leagueObj?.id || 'epl' };
+    pMatches.push(newMatch);
+    toast(`✅ ${teams} imeongezwa!`);
+    document.getElementById('fix-modal')?.remove();
+    showTab('post');
+  };
+}
+
 // Start/stop live polling
 function startLiveScores() {
   if (liveInterval) return;
@@ -1007,46 +1266,6 @@ const LEAGUES=[
   {id:'saudi',name:'Saudi Pro League',flag:'🇸🇦',region:'Asia'},
   {id:'uae',name:'UAE Pro League',flag:'🇦🇪',region:'Asia'},
   {id:'qatar',name:'Qatar Stars League',flag:'🇶🇦',region:'Asia'},
-  {id:'iran',name:'Persian Gulf Pro League',flag:'🇮🇷',region:'Asia'},
-  {id:'iraq',name:'Iraqi Premier League',flag:'🇮🇶',region:'Asia'},
-  {id:'jordan',name:'Jordan Premier League',flag:'🇯🇴',region:'Asia'},
-  {id:'thailand',name:'Thai League 1',flag:'🇹🇭',region:'Asia'},
-  {id:'vietnam',name:'V.League 1',flag:'🇻🇳',region:'Asia'},
-  {id:'malaysia',name:'Super League Malaysia',flag:'🇲🇾',region:'Asia'},
-  {id:'indonesia',name:'Liga 1 Indonesia',flag:'🇮🇩',region:'Asia'},
-  {id:'australia',name:'A-League Australia',flag:'🇦🇺',region:'Asia'},
-  // EUROPE EXTRA
-  {id:'ukraine',name:'Ukrainian Premier League',flag:'🇺🇦',region:'Europe'},
-  {id:'armenia',name:'Armenian Premier League',flag:'🇦🇲',region:'Europe'},
-  {id:'georgia',name:'Erovnuli Liga Georgia',flag:'🇬🇪',region:'Europe'},
-  {id:'kazakhstan',name:'Kazakhstan Premier League',flag:'🇰🇿',region:'Europe'},
-  {id:'azerbaijan',name:'Azerbaijan Premier League',flag:'🇦🇿',region:'Europe'},
-  {id:'belarus',name:'Belarusian Premier League',flag:'🇧🇾',region:'Europe'},
-  {id:'slovakia',name:'Slovak Super Liga',flag:'🇸🇰',region:'Europe'},
-  {id:'slovenia',name:'Slovenian PrvaLiga',flag:'🇸🇮',region:'Europe'},
-  {id:'bulgarian',name:'Bulgarian First League',flag:'🇧🇬',region:'Europe'},
-  {id:'hungarian',name:'Nemzeti Bajnokság Hungary',flag:'🇭🇺',region:'Europe'},
-  {id:'albanian',name:'Kategoria Superiore Albania',flag:'🇦🇱',region:'Europe'},
-  {id:'finnish',name:'Veikkausliiga Finland',flag:'🇫🇮',region:'Europe'},
-  {id:'irish',name:'League of Ireland',flag:'🇮🇪',region:'Europe'},
-  {id:'israelipl',name:'Israeli Premier League',flag:'🇮🇱',region:'Europe'},
-  // AFRICA EXTRA
-  {id:'angola',name:'Girabola Angola',flag:'🇦🇴',region:'Africa'},
-  {id:'senegal',name:'Ligue 1 Senegal',flag:'🇸🇳',region:'Africa'},
-  {id:'ivory_coast',name:'MTN Ligue 1 Ivory Coast',flag:'🇨🇮',region:'Africa'},
-  {id:'cameroon',name:'MTN Elite One Cameroon',flag:'🇨🇲',region:'Africa'},
-  {id:'algeria',name:'Ligue Professionnelle 1 Algeria',flag:'🇩🇿',region:'Africa'},
-  {id:'tunisia',name:'Ligue 1 Tunisie',flag:'🇹🇳',region:'Africa'},
-  {id:'mozambique',name:'Moçambola',flag:'🇲🇿',region:'Africa'},
-  {id:'zimbabwe',name:'Castle Lager Premier League',flag:'🇿🇼',region:'Africa'},
-  // AMERICAS EXTRA
-  {id:'peru',name:'Liga 1 Peru',flag:'🇵🇪',region:'Americas'},
-  {id:'ecuador',name:'LigaPro Ecuador',flag:'🇪🇨',region:'Americas'},
-  {id:'venezuela',name:'Liga FUTVE Venezuela',flag:'🇻🇪',region:'Americas'},
-  {id:'uruguay',name:'Primera División Uruguay',flag:'🇺🇾',region:'Americas'},
-  {id:'paraguay',name:'División Profesional Paraguay',flag:'🇵🇾',region:'Americas'},
-  {id:'bolivia',name:'División Profesional Bolivia',flag:'🇧🇴',region:'Americas'},
-  {id:'costa_rica',name:'Primera División Costa Rica',flag:'🇨🇷',region:'Americas'},
 ];
 const MARKETS=[
   '1X2','Double Chance','Draw No Bet',
@@ -1071,7 +1290,7 @@ const genOTP=()=>Math.floor(100000+Math.random()*900000).toString();
 const el=(id)=>document.getElementById(id);
 const lgName=(id)=>LEAGUES.find(l=>l.id===id)?.name||id;
 const lgFlag=(id)=>LEAGUES.find(l=>l.id===id)?.flag||'🌐';
-const sc=(s)=>s==='WON'||s==='WIN'?'var(--win)':s==='LOST'||s==='LOSS'?'var(--loss)':s==='PENDING'?'var(--warn)':'#888';
+const sc=(s)=>s==='WON'?'var(--win)':s==='LOST'?'var(--loss)':s==='PENDING'?'var(--warn)':'#888';
 let currentUser=null,mikeka=[],allMikeka=[],realtimeChannel=null,currentTab='home';
 
 // TOAST
@@ -1203,27 +1422,17 @@ async function updateUser(updates){
   }
 }
 async function loadData(){
-  // Load all mikeka — viewers see all mikeka from all analysts/owners
-  const{data:all}=await sb.from('mikeka').select('*,matches(*),users(name,role)').order('created_at',{ascending:false}).limit(100);
+  const{data:my}=await sb.from('mikeka').select('*,matches(*)').eq('user_id',currentUser.id).order('created_at',{ascending:false});
+  mikeka=my||[];
+  const{data:all}=await sb.from('mikeka').select('*,matches(*),users(name,role)').order('created_at',{ascending:false}).limit(50);
   allMikeka=all||[];
-  // Personal stats (bankroll/reports) = own mikeka only for analysts/owners; viewers see all
-  if(currentUser.role==='owner'||currentUser.role==='analyst'){
-    mikeka=(all||[]).filter(m=>m.user_id===currentUser.id);
-  } else {
-    mikeka=all||[];
-  }
 }
 function startRealtime(){
   realtimeChannel=sb.channel('njem-v2')
     .on('postgres_changes',{event:'*',schema:'public',table:'mikeka'},async()=>{
       await loadData();
       if(['home','feed','mikeka','results'].includes(currentTab))showTab(currentTab);
-    })
-    .on('postgres_changes',{event:'*',schema:'public',table:'matches'},async()=>{
-      await loadData();
-      if(['home','feed','mikeka','results'].includes(currentTab))showTab(currentTab);
-    })
-    .subscribe();
+    }).subscribe();
 }
 function getStreak(){
   const s=[...mikeka].filter(m=>m.status!=='PENDING'&&m.status!=='VOID');
@@ -1321,7 +1530,7 @@ function renderShell(){
   const isAnalyst=currentUser.role==='analyst'||isOwner;
   const tabs=[
     {id:'home',icon:'🏠',label:'Home'},
-    {id:'feed',icon:'📡',label:'Feed'},
+    {id:'fixtures',icon:'📅',label:'Fixtures'},
     {id:'mikeka',icon:'📋',label:'Mikeka'},
     ...(isAnalyst?[{id:'post',icon:'➕',label:'Weka'}]:[]),
     {id:'reports',icon:'📊',label:'Ripoti'},
@@ -1366,6 +1575,7 @@ function showTab(tab){
   }
   const c=el('content');c.className='fadeUp';void c.offsetWidth;
   if(tab==='home')renderHome(c);
+  if(tab==='fixtures')renderFixtures(c);
   if(tab==='feed')renderFeed(c);
   if(tab==='mikeka')renderMikeka(c);
   if(tab==='post')renderPost(c);
@@ -1411,25 +1621,14 @@ function showBankrollModal(){
 
 // HOME
 function renderHome(c){
-  const isOwner=currentUser.role==='owner',isAnalyst=currentUser.role==='analyst'||isOwner;
-  const isViewer=currentUser.role==='viewer';
   const won=mikeka.filter(m=>m.status==='WON'),lost=mikeka.filter(m=>m.status==='LOST'),settled=[...won,...lost];
-  const staked=isViewer?0:mikeka.reduce((s,m)=>s+(m.stake||0),0);
-  const ret=isViewer?0:won.reduce((s,m)=>s+(m.potential_return||0),0);
+  const staked=mikeka.reduce((s,m)=>s+(m.stake||0),0);
+  const ret=won.reduce((s,m)=>s+(m.potential_return||0),0);
   const profit=ret-staked,roi=staked>0?((profit/staked)*100).toFixed(1):'0.0';
   const wr=settled.length>0?((won.length/settled.length)*100).toFixed(1):'0.0';
   const pending=mikeka.filter(m=>m.status==='PENDING'),streak=getStreak();
+  const isOwner=currentUser.role==='owner',isAnalyst=currentUser.role==='analyst'||isOwner;
   c.innerHTML=`
-    ${isViewer ? `
-    <div style="background:linear-gradient(135deg,#0f3520,#092518);border:1px solid rgba(0,255,133,.2);border-radius:20px;padding:1.5rem;margin-bottom:1rem" class="glow">
-      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">📡 Muhtasari wa Mikeka</div>
-      <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:var(--accent);letter-spacing:-1px">${mikeka.length} Mikeka</div>
-      <div style="display:flex;gap:1.5rem;margin-top:10px">
-        <div><div style="font-size:10px;color:var(--muted)">Imeshinda</div><div style="font-size:15px;font-weight:700;color:var(--win)">${won.length}</div></div>
-        <div><div style="font-size:10px;color:var(--muted)">Win Rate</div><div style="font-size:15px;font-weight:700;color:${parseFloat(wr)>=50?'var(--win)':'var(--loss)'}">${wr}%</div></div>
-        <div><div style="font-size:10px;color:var(--muted)">Pending</div><div style="font-size:15px;font-weight:700;color:var(--warn)">${pending.length}</div></div>
-      </div>
-    </div>` : `
     <div style="background:linear-gradient(135deg,#0f3520,#092518);border:1px solid rgba(0,255,133,.2);border-radius:20px;padding:1.5rem;margin-bottom:1rem" class="glow">
       <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Bankroll Yako</div>
       <div style="font-family:'Syne',sans-serif;font-size:38px;font-weight:800;color:var(--accent);letter-spacing:-1px">TZS ${fmt(currentUser.bankroll)}</div>
@@ -1439,7 +1638,7 @@ function renderHome(c){
         <div><div style="font-size:10px;color:var(--muted)">Pending</div><div style="font-size:15px;font-weight:700;color:var(--warn)">${pending.length}</div></div>
       </div>
       ${isOwner?`<button onclick="window._bk()" style="margin-top:12px;padding:.4rem 1rem;border-radius:20px;border:1px solid rgba(0,255,133,.3);background:rgba(0,255,133,.08);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer">➕ Ongeza / ➖ Toa</button>`:''}
-    </div>`}
+    </div>
     <div class="stats-grid">
       <div class="stat-box"><div class="stat-icon">📋</div><div class="stat-val">${mikeka.length}</div><div class="stat-label">Mikeka</div></div>
       <div class="stat-box"><div class="stat-icon">✅</div><div class="stat-val" style="color:var(--win)">${won.length}</div><div class="stat-label">Imeshinda</div></div>
@@ -1465,79 +1664,60 @@ function renderHome(c){
       <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px">🛡️ NJEM System Rules</div>
       ${[['✅','Max mechi 6 kwa accumulator'],['✅','Double Chance ni market bora'],['✅','Kelly Criterion kwa staking'],['✅','Cashout @ 70% ya lengo'],['🚨',`Loss ${LOSS_STREAK_LIMIT}+ mfululizo → Simama!`],['🤖','AI inakuonya kabla ya kuweka']].map(([i,r])=>`<div style="display:flex;gap:8px;font-size:12px;color:#5a9e70;margin-bottom:6px"><span>${i}</span><span>${r}</span></div>`).join('')}
     </div>
-    <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px">📋 Mikeka ya Hivi Karibuni</div>
-    ${mikeka.slice(0,3).map(m=>mkCard(m,true,currentUser.role==='viewer')).join('')}
-    ${mikeka.length===0?'<div class="empty"><div style="font-size:44px">📋</div><div style="margin-top:8px">Hakuna mikeka bado</div></div>':''}`;
+    ${mikeka.slice(0,3).map(m=>mkCard(m,true)).join('')}`;
 
   // Render live matches section
   renderLiveSection();
 }
 
-// Live section tab state
-let liveSectionTab = 'live'; // 'live' | 'upcoming' | 'finished'
-
 function renderLiveSection() {
   const sec = el('live-section');
   if (!sec) return;
 
-  // Deduplicate all scores by homeTeam+awayTeam
+  const liveMatches = Object.values(liveScores).filter(s => s.isLive);
+  // deduplicate
   const seen = new Set();
-  const allMatches = Object.values(liveScores).filter(s => {
+  const unique = liveMatches.filter(s => {
     const k = s.homeTeam + s.awayTeam;
     if (seen.has(k)) return false;
     seen.add(k); return true;
   });
 
-  const liveM = allMatches.filter(s => s.isLive);
-  const upcomingM = allMatches.filter(s => s.isUpcoming).sort((a,b) => (a.time||'').localeCompare(b.time||''));
-  const finishedM = allMatches.filter(s => s.isFinished);
-
-  if (!allMatches.length) {
+  if (!unique.length) {
     sec.innerHTML = '';
     return;
   }
 
-  const tabStyle = (t) => `flex:1;padding:.4rem;border-radius:10px;border:none;background:${liveSectionTab===t?'rgba(0,255,133,.15)':'transparent'};color:${liveSectionTab===t?'var(--accent)':'var(--muted)'};font-weight:700;font-size:11px;cursor:pointer`;
-
-  const matchCard = (s) => `
-    <div onclick="window._showMatchDetails('${s.homeTeam.replace(/'/g,"\'")} vs ${s.awayTeam.replace(/'/g,"\'")}','${s.eventId}')"
-      style="background:var(--surface);border:1px solid ${s.isLive?'rgba(255,68,68,.4)':s.isFinished?'var(--border)':'rgba(0,255,133,.15)'};border-radius:12px;padding:.75rem;display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:6px">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.homeTeam}</div>
-        <div style="font-size:10px;color:var(--muted);margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.league}</div>
-        <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.awayTeam}</div>
-      </div>
-      <div style="text-align:center;min-width:85px;padding-left:8px">
-        ${s.isLive ? `
-          <div style="font-size:20px;font-weight:800;color:var(--danger);letter-spacing:2px">${s.home}-${s.away}</div>
-          <div style="font-size:11px;color:var(--danger);font-weight:700;animation:pulse 1s infinite">🔴 ${s.minute||s.status||'LIVE'}</div>
-        ` : s.isFinished ? `
-          <div style="font-size:20px;font-weight:800;color:var(--muted);letter-spacing:2px">${s.home}-${s.away}</div>
-          <div style="font-size:10px;color:var(--muted);font-weight:600">⚫ FT</div>
-        ` : `
-          <div style="font-size:17px;font-weight:800;color:var(--accent)">${s.time||'--:--'}</div>
-          <div style="font-size:10px;color:var(--muted)">🕐 Leo</div>
-        `}
-      </div>
-    </div>`;
-
-  const activeList = liveSectionTab==='live' ? liveM : liveSectionTab==='upcoming' ? upcomingM : finishedM;
-  const emptyMsg = liveSectionTab==='live' ? 'Hakuna mechi zinazochezwa sasa' : liveSectionTab==='upcoming' ? 'Hakuna fixtures za leo' : 'Hakuna matokeo bado';
-
   sec.innerHTML = `
-    <div style="margin-bottom:8px">
-      <div style="display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:4px;margin-bottom:8px">
-        <button onclick="window._lsTab('live')" style="${tabStyle('live')}">🔴 Live ${liveM.length?'('+liveM.length+')':''}</button>
-        <button onclick="window._lsTab('upcoming')" style="${tabStyle('upcoming')}">🕐 Fixtures ${upcomingM.length?'('+upcomingM.length+')':''}</button>
-        <button onclick="window._lsTab('finished')" style="${tabStyle('finished')}">⚫ Matokeo ${finishedM.length?'('+finishedM.length+')':''}</button>
-      </div>
-      ${activeList.length===0
-        ? `<div style="text-align:center;color:var(--muted);padding:1rem;font-size:12px">${emptyMsg}</div>`
-        : activeList.slice(0,12).map(matchCard).join('')
-      }
+    <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+      <span style="animation:pulse 1s infinite">🔴</span> Live Sasa Hivi (${unique.length})
+      <span style="margin-left:auto;font-size:10px;color:var(--muted);font-weight:400">Bonyeza mechi kwa details</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      ${unique.slice(0,8).map(s => `
+        <div onclick="window._showMatchDetails('${s.homeTeam.replace(/'/g,"\'")} vs ${s.awayTeam.replace(/'/g,"\'")}','${s.eventId}')"
+          style="background:var(--surface);border:1px solid ${s.isLive?'rgba(255,68,68,.4)':'rgba(26,53,34,.8)'};border-radius:12px;padding:.75rem;display:flex;justify-content:space-between;align-items:center;cursor:pointer;transition:border .2s">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:600">${s.homeTeam}</div>
+            <div style="font-size:10px;color:var(--muted);margin:2px 0">${s.league}</div>
+            <div style="font-size:12px;font-weight:600">${s.awayTeam}</div>
+          </div>
+          <div style="text-align:center;min-width:80px">
+            ${s.isLive ? `
+              <div style="font-size:22px;font-weight:800;color:var(--danger);letter-spacing:2px">${s.home} - ${s.away}</div>
+              <div style="font-size:10px;color:var(--danger);font-weight:700;animation:pulse 1s infinite">🔴 ${s.minute||'LIVE'}</div>
+            ` : s.isFinished ? `
+              <div style="font-size:22px;font-weight:800;color:var(--muted);letter-spacing:2px">${s.home} - ${s.away}</div>
+              <div style="font-size:10px;color:var(--muted)">FT</div>
+            ` : `
+              <div style="font-size:14px;font-weight:700;color:var(--text)">${s.time||'--:--'}</div>
+              <div style="font-size:10px;color:var(--muted)">Inakuja</div>
+            `}
+          </div>
+        </div>`).join('')}
     </div>
   `;
-  window._lsTab = (t) => { liveSectionTab = t; renderLiveSection(); };
+
 }
 
 // FEED
@@ -1574,32 +1754,27 @@ function renderFeed(c){
 let mkF='ALL',mkQ='';
 function renderMikeka(c){
   const shown=mikeka.filter(m=>mkF==='ALL'||m.status===mkF).filter(m=>!mkQ||m.name?.toLowerCase().includes(mkQ)||m.matches?.some(x=>x.teams?.toLowerCase().includes(mkQ)));
-  const isViewer=currentUser.role==='viewer';
   c.innerHTML=`
     <input class="inp" id="mk-q" placeholder="🔍 Tafuta mkeka au timu..." value="${mkQ}" style="margin-bottom:.75rem"/>
     <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:.75rem">
       ${['ALL','PENDING','WON','LOST','VOID'].map(f=>`<button class="btn-outline ${mkF===f?'active':''}" onclick="window._mkF('${f}')" style="${mkF===f?`border-color:${sc(f)};background:${sc(f)}22;color:${sc(f)}`:''}">
         ${f} <span style="opacity:.6">${mikeka.filter(m=>f==='ALL'||m.status===f).length}</span></button>`).join('')}
     </div>
-    ${shown.length===0?'<div class="empty"><div style="font-size:44px">📋</div><div style="margin-top:8px">Hakuna mikeka</div></div>':shown.map(m=>mkCard(m,false,isViewer)).join('')}`;
+    ${shown.length===0?'<div class="empty"><div style="font-size:44px">📋</div><div style="margin-top:8px">Hakuna mikeka</div></div>':shown.map(m=>mkCard(m,false)).join('')}`;
   el('mk-q').oninput=(e)=>{mkQ=e.target.value.toLowerCase();renderMikeka(c);};
   window._mkF=(f)=>{mkF=f;renderMikeka(c);};
-  // Wire expand/collapse after DOM is ready
-  setTimeout(()=>{
-    c.querySelectorAll('[data-exp]').forEach(btn=>{
-      btn.onclick=()=>{const d=el('det-'+btn.dataset.exp);if(d)d.style.display=d.style.display==='none'?'block':'none';};
-    });
-  },0);
+  c.querySelectorAll('[data-exp]').forEach(btn=>{
+    btn.onclick=()=>{const d=el('det-'+btn.dataset.exp);if(d)d.style.display=d.style.display==='none'?'block':'none';};
+  });
 }
 
-function mkCard(m,mini,isViewer=false){
+function mkCard(m,mini){
   const matches=m.matches||[];
-  const poster=m.users?.name||'';
   return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-bottom:.6rem;overflow:hidden">
     <div data-exp="${m.id}" style="padding:.85rem;cursor:${mini?'default':'pointer'};display:flex;justify-content:space-between;align-items:center">
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.name||'Mkeka #'+m.id.slice(-4)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${m.date} · ${matches.length} mechi${isViewer&&poster?' · 👤 '+poster:' · TZS '+fmt(m.stake)}</div>
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:13px">${m.name||'Mkeka #'+m.id.slice(-4)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${m.date} · ${matches.length} mechi · TZS ${fmt(m.stake)}</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
         <div style="background:${sc(m.status)}22;color:${sc(m.status)};padding:.15rem .55rem;border-radius:20px;font-size:10px;font-weight:700">${m.status}</div>
@@ -1624,13 +1799,16 @@ let pMatches=[],pChecks=[false,false,false,false],kOn=false,kProb=55;
 function renderPost(c){
   if(!pMatches.length)pMatches=[newM()];
   const tOdds=pMatches.reduce((p,m)=>p*(parseFloat(m.odds)||1),1);
-  const stake=parseInt(el('post-stake')?.value||currentUser.default_stake||5000);
+  const stake=parseInt(el('post-stake')?.value||currentUser.stake||5000);
   const potRet=Math.round(tOdds*stake);
   const kF=kelly(tOdds,kProb/100),kStake=Math.round(currentUser.bankroll*kF/1000)*1000;
   const allOk=pChecks.every(Boolean),risk=analyzeRisk(pMatches);
   const regions=[...new Set(LEAGUES.map(l=>l.region))];
   c.innerHTML=`
-    <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:1rem">➕ Mkeka Mpya</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800">➕ Mkeka Mpya</div>
+      <button onclick="window._showFixtures()" style="padding:.45rem .9rem;border-radius:20px;border:1.5px solid rgba(77,166,255,.4);background:rgba(77,166,255,.08);color:var(--info);font-size:12px;font-weight:600;cursor:pointer">📅 Fixtures</button>
+    </div>
     <div style="margin-bottom:.75rem">
       <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px">📸 Upload Betslip — AI Itasoma</div>
       <label for="ocr-in" style="display:block;border:2px dashed var(--border);border-radius:14px;padding:1.25rem 1rem;text-align:center;cursor:pointer;background:rgba(0,255,133,.03);transition:border-color .2s" id="ocr-label">
@@ -1659,7 +1837,7 @@ function renderPost(c){
     <input class="inp" id="post-name" placeholder="Jina la mkeka (optional)" style="margin-bottom:10px"/>
     <div class="grid-2" style="margin-bottom:10px">
       <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">Tarehe</div><input type="date" class="inp-sm" id="post-date" value="${today()}"/></div>
-      <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">Stake (TZS)</div><input type="number" class="inp-sm" id="post-stake" value="${currentUser.default_stake||5000}"/></div>
+      <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">Stake (TZS)</div><input type="number" class="inp-sm" id="post-stake" value="${currentUser.stake||5000}"/></div>
     </div>
     <div class="card" style="margin-bottom:.9rem">
       <div style="display:flex;justify-content:space-between;align-items:center${kOn?';margin-bottom:12px':''}">
@@ -1743,7 +1921,7 @@ function renderPost(c){
     if(streak.type==='LOSS'&&streak.count>=LOSS_STREAK_LIMIT)return toast('🚨 Loss streak! Pumzika kwanza!','err');
     const name=el('post-name')?.value||`Mkeka ${mikeka.length+1}`;
     const date=el('post-date')?.value||today();
-    const stake=parseInt(el('post-stake')?.value||currentUser.default_stake||5000);
+    const stake=parseInt(el('post-stake')?.value||5000);
     const ana=el('post-ana')?.value||'';
     const tOdds=pMatches.reduce((p,m)=>p*(parseFloat(m.odds)||1),1);
     const potRet=Math.round(tOdds*stake);
@@ -1935,14 +2113,23 @@ async function renderAdmin(c){
         </div>
       </div>`).join('')}
     </div>
+    <!-- API-Sports Key -->
+    <div class="card" style="border-color:rgba(255,170,0,.3)">
+      <div style="font-size:12px;font-weight:700;color:var(--warn);margin-bottom:10px">⚽ API-Sports Key — Live Scores + Fixtures</div>
+      <input class="inp" id="apisports-key" placeholder="Paste API-Sports key hapa..." style="margin-bottom:8px" value="${API_SPORTS_KEY}"/>
+      <button onclick="window._saveApiSports()" class="btn-ghost" style="border-color:var(--warn);color:var(--warn);margin-bottom:8px">💾 Hifadhi API-Sports Key</button>
+      <div style="font-size:11px;color:var(--muted)">Pata key bure (100 req/siku): <a href="https://dashboard.api-sports.io" target="_blank" style="color:var(--warn)">dashboard.api-sports.io</a></div>
+    </div>
+    <!-- OpenRouter Key -->
     <div class="card" style="border-color:rgba(77,166,255,.3)">
-      <div style="font-size:12px;font-weight:700;color:var(--info);margin-bottom:10px">🤖 OpenRouter AI — Weka API Key</div>
+      <div style="font-size:12px;font-weight:700;color:var(--info);margin-bottom:10px">🤖 OpenRouter AI — Betslip OCR</div>
       <input class="inp" id="gemini-key" placeholder="Paste OpenRouter API key hapa (sk-or-v1-...)" style="margin-bottom:8px" value="${GEMINI_KEY}"/>
-      <button onclick="window._saveGemini()" class="btn-ghost">💾 Hifadhi Key</button>
-      <div style="font-size:11px;color:var(--muted);margin-top:8px">Pata key bure: <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent)">openrouter.ai/keys</a> (inaanza na sk-or-v1-...)</div>
+      <button onclick="window._saveGemini()" class="btn-ghost">💾 Hifadhi OpenRouter Key</button>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">Pata key bure: <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent)">openrouter.ai/keys</a></div>
     </div>`;
   window._role=async(uid,role)=>{await sb.from('users').update({role}).eq('id',uid);toast(`Role → ${ROLES[role]}`);};
-  window._saveGemini=()=>{GEMINI_KEY=el('gemini-key')?.value||'';localStorage.setItem('njem_or_key',GEMINI_KEY);localStorage.removeItem('njem_gemini_key');toast(GEMINI_KEY?'✅ OpenRouter key imehifadhiwa! Inafanya kazi sasa.':'Key ni empty','warn');renderAdmin(c);};
+  window._saveGemini=()=>{GEMINI_KEY=el('gemini-key')?.value||'';localStorage.setItem('njem_or_key',GEMINI_KEY);localStorage.removeItem('njem_gemini_key');toast(GEMINI_KEY?'✅ OpenRouter key imehifadhiwa!':'Key ni empty','warn');renderAdmin(c);};
+  window._saveApiSports=()=>{API_SPORTS_KEY=el('apisports-key')?.value||'';localStorage.setItem('njem_apisports_key',API_SPORTS_KEY);toast(API_SPORTS_KEY?'✅ API-Sports key imehifadhiwa! Live scores zinaanza...':'Key ni empty','warn');if(API_SPORTS_KEY)fetchLiveScores();renderAdmin(c);};
 }
 
 // ═══════════════════════════════════════
@@ -1970,6 +2157,7 @@ async function checkSavedSession() {
 
 // Global handlers
 window._showMatchDetails = (teams, eventId) => showMatchDetailsModal(teams, eventId);
+window._showFixtures = () => showFixtureBrowser();
 window._aiAnalysis = (teams, mid) => {
   readInps();
   const match = pMatches.find(m => m._id === mid);
