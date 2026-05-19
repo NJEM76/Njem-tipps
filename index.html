@@ -84,6 +84,37 @@ async function fetchLiveScores() {
       events = data.events || [];
     }
 
+    liveScores = {}; 
+
+    events.forEach(ev => {
+      if (!ev.strHomeTeam || !ev.strAwayTeam) return;
+
+      const key = `${ev.strHomeTeam} vs ${ev.strAwayTeam}`.toLowerCase().trim();
+      
+      const status = (ev.strStatus || '').toLowerCase();
+      const isLive = status.includes('live') || status.includes('in progress') || 
+                     status.includes('1h') || status.includes('2h') || 
+                     status.includes('ht') || (ev.intHomeScore !== null && ev.intAwayScore !== null);
+      
+      const isFinished = status.includes('ft') || status.includes('finished') || 
+                        status.includes('pen') || status.includes('aet');
+
+      liveScores[key] = {
+        home: ev.intHomeScore !== null ? ev.intHomeScore : '-',
+        away: ev.intAwayScore !== null ? ev.intAwayScore : '-',
+        minute: ev.strProgress || (isFinished ? 'FT' : isLive ? 'LIVE' : 'NS'),
+        league: ev.strLeague || 'Unknown',
+        isLive: isLive,
+        isFinished: isFinished
+      };
+    });
+
+    if (currentTab === 'home') renderHome();
+  } catch(e) {
+    console.log("Live scores error:", e);
+  }
+}
+
     events.forEach(ev => {
       if (!ev.strHomeTeam || !ev.strAwayTeam) return;
       const key = `${ev.strHomeTeam} vs ${ev.strAwayTeam}`.toLowerCase().trim();
@@ -101,27 +132,31 @@ async function fetchLiveScores() {
 }
 
 function renderHome() {
+function renderHome() {
   let html = `<h2 style="margin-bottom:15px">🔴 Live Scores</h2>`;
 
-  const matches = Object.keys(liveScores);
+  const liveMatches = Object.keys(liveScores).filter(key => liveScores[key].isLive);
 
-  if (matches.length === 0) {
-    html += `<p style="color:#4a7a5a;text-align:center;padding:40px 0">Hakuna mechi za live kwa sasa...<br><small>Inaangalia kila sekunde 40</small></p>`;
+  if (liveMatches.length === 0) {
+    html += `<p style="color:#4a7a5a;text-align:center;padding:60px 20px;font-size:15px">
+      Hakuna mechi za live kwa sasa 😔<br>
+      <small>Mechi zitaonekana hapa wakati zinaendelea</small>
+    </p>`;
   } else {
-    matches.slice(0, 10).forEach(key => {
+    liveMatches.forEach(key => {
       const m = liveScores[key];
       html += `
         <div class="card">
           <small style="color:#4a7a5a">${m.league}</small><br>
           <strong>${key}</strong><br>
-          <span style="font-size:18px;font-weight:700">${m.home} - ${m.away}</span>
-          <span style="float:right;color:var(--accent)">${m.minute}</span>
+          <span style="font-size:19px;font-weight:700">${m.home} - ${m.away}</span>
+          <span style="float:right;color:#00ff85;font-weight:700">${m.minute}</span>
         </div>`;
     });
   }
 
   document.getElementById('content').innerHTML = html;
-}
+        }
 
 async function loadFixtures() {
   try {
