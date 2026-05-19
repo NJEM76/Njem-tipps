@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>NJEM Tipps - Login System</title>
+  <title>NJEM Tipps - Real Data</title>
   <meta name="theme-color" content="#00ff85">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
@@ -18,7 +18,6 @@
     input { background: #0a1910; border: 1px solid var(--border); color: var(--text); text-align: center; }
     button { background: var(--accent); color: #05110a; font-weight: bold; cursor: pointer; }
     button.secondary { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
-    h2 { text-align: center; margin-bottom: 20px; color: var(--accent); font-family: 'Syne'; }
     .error { color: #ff8888; text-align: center; margin-top: 12px; font-size: 0.85rem; }
     .header-title { font-family: 'Syne'; font-size: 1.4rem; color: var(--accent); }
     .card { background: rgba(0,0,0,0.2); border-radius: 24px; padding: 1rem; margin-bottom: 1rem; }
@@ -60,11 +59,98 @@
 </div>
 
 <script>
-  // ----------------------- SYSTEM LOGIN / USER MANAGEMENT -----------------------
+  // ----------------------- API FOOTBALL (REAL DATA) -----------------------
+  const API_FOOTBALL_KEY = "YOUR_API_FOOTBALL_KEY"; // Register on RapidAPI to get your key.
+  const API_FOOTBALL_HOST = "v3.football.api-sports.io";
+  const BASE_URL = "https://v3.football.api-sports.io";
+
+  async function fetchRealLiveScores() {
+    try {
+      // Fetch live matches from API-Football
+      const response = await fetch(`${BASE_URL}/fixtures?live=all`, {
+        method: "GET",
+        headers: {
+          "x-apisports-key": API_FOOTBALL_KEY,
+          "x-apisports-host": API_FOOTBALL_HOST,
+        },
+      });
+      const data = await response.json();
+      if (data.response && data.response.length > 0) {
+        // Store the live matches in a global variable (use it to replace liveScores)
+        liveScores = {};
+        data.response.forEach(match => {
+          const homeTeam = match.teams.home.name;
+          const awayTeam = match.teams.away.name;
+          const matchKey = `${homeTeam} vs ${awayTeam}`;
+          liveScores[matchKey] = {
+            home: match.goals.home,
+            away: match.goals.away,
+            minute: match.fixture.status.elapsed ? `${match.fixture.status.elapsed}'` : "LIVE",
+            league: match.league.name,
+            isLive: true
+          };
+        });
+        if (currentTab === 'home') renderHome();
+      } else {
+        // If no live matches, fallback to fixtures of the day
+        await fetchRealFixtures();
+      }
+    } catch (err) {
+      console.error("Error fetching real live scores:", err);
+      addToast("Imeshindwa kupata data halisi za mechi. Angalia API key yako.", true);
+    }
+  }
+
+  async function fetchRealFixtures() {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const response = await fetch(`${BASE_URL}/fixtures?date=${today}`, {
+        method: "GET",
+        headers: {
+          "x-apisports-key": API_FOOTBALL_KEY,
+          "x-apisports-host": API_FOOTBALL_HOST,
+        },
+      });
+      const data = await response.json();
+      if (data.response && data.response.length > 0) {
+        fixturesList = [];
+        data.response.forEach(match => {
+          const fixture = {
+            home: match.teams.home.name,
+            away: match.teams.away.name,
+            time: match.fixture.date.substring(11, 16), // Extract HH:MM from the datetime string
+            league: match.league.name,
+            date: match.fixture.date.split('T')[0]
+          };
+          fixturesList.push(fixture);
+        });
+      } else {
+        fixturesList = [];
+      }
+      if (currentTab === 'fixtures') renderFixtures();
+      if (currentTab === 'home' && Object.keys(liveScores).length === 0) {
+        renderHomeFallback();
+      }
+    } catch (err) {
+      console.error("Error fetching fixtures:", err);
+      addToast("Imeshindwa kupata data za fixtures za leo.", true);
+    }
+  }
+
+  // ----------------------- FALLBACK: DEMO DATA (IF NO REAL DATA) -----------------------
+  function renderHomeFallback() {
+    const container = document.getElementById('mainContent');
+    let html = `<div class="flex-between"><h3><span class="live-dot"></span> Live Scores</h3><button class="secondary" onclick="refreshData()">🔄 Refresh</button></div>
+                <div class="card" style="text-align:center;">Hakuna mechi za live kwa sasa. Jaribu tena baada ya dakika chache.</div>`;
+    container.innerHTML = html;
+  }
+
+  // ----------------------- USER & LOCAL STORAGE -----------------------
   let currentUserPIN = null;
   let userData = {}; // structure: { bankroll, myBets, publicTips }
+  let liveScores = {};
+  let fixturesList = [];
 
-  // Simpan data per user berdasarkan PIN
   function saveUserData() {
     if (!currentUserPIN) return;
     let allUsers = JSON.parse(localStorage.getItem('njem_users')) || {};
@@ -77,7 +163,6 @@
     if (allUsers[pin]) {
       userData = allUsers[pin];
     } else {
-      // user baru, init default
       userData = {
         bankroll: 125000,
         myBets: [],
@@ -104,29 +189,12 @@
     setTimeout(() => toastDiv.remove(), 3500);
   }
 
-  // ----------------------- MOCK DATA FOR LIVE & FIXTURES (no API) -----------------------
-  let liveScores = {};
-  let fixturesList = [];
-
-  function generateMockData() {
-    // Live matches
-    liveScores = {
-      "Simba SC vs Young Africans": { home: Math.floor(Math.random()*3), away: Math.floor(Math.random()*2), minute: `${Math.floor(Math.random()*75)+15}'`, league: "NBC Premier" },
-      "Al Ahly vs Zamalek": { home: Math.floor(Math.random()*2), away: Math.floor(Math.random()*2), minute: `${Math.floor(Math.random()*60)+30}'`, league: "Egypt League" },
-      "Manchester City vs Liverpool": { home: Math.floor(Math.random()*2)+1, away: Math.floor(Math.random()*2), minute: `${Math.floor(Math.random()*50)+40}'`, league: "EPL" }
-    };
-    fixturesList = [
-      { home: "Azam FC", away: "Namungo", time: "16:00", league: "NBC PL" },
-      { home: "Singida BG", away: "Kagera Sugar", time: "18:30", league: "NBC PL" },
-      { home: "Barcelona vs Real Madrid", away: "", time: "22:00", league: "La Liga" }
-    ];
-  }
-
   // ----------------------- RENDERS -----------------------
   function renderHome() {
     let html = `<div class="flex-between"><h3><span class="live-dot"></span> Live Scores</h3><button class="secondary" onclick="refreshData()">🔄 Refresh</button></div>`;
-    if (Object.keys(liveScores).length === 0) html += `<div class="card">Hakuna mechi za live</div>`;
-    else {
+    if (Object.keys(liveScores).length === 0) {
+      html += `<div class="card" style="text-align:center;">Hakuna mechi za live kwa sasa. Jaribu tena baada ya dakika chache.</div>`;
+    } else {
       for (let [match, data] of Object.entries(liveScores)) {
         html += `<div class="card">
           <div class="flex-between"><small>${data.league}</small><span class="badge-live">LIVE ${data.minute}</span></div>
@@ -139,14 +207,15 @@
   }
 
   function renderFixtures() {
-    let html = `<h3>📅 Mechi za Leo</h3>`;
-    if (fixturesList.length === 0) html += `<div class="card">Hakuna fixtures</div>`;
-    else {
+    let html = `<h3>📅 Mechi za Leo</h3><button class="secondary" onclick="refreshData()" style="margin-bottom:10px;">🔄 Refresh Fixtures</button>`;
+    if (fixturesList.length === 0) {
+      html += `<div class="card" style="text-align:center;">Hakuna fixtures za leo. Jaribu tena baada ya muda.</div>`;
+    } else {
       fixturesList.forEach(f => {
         html += `<div class="card">
           <div class="flex-between"><span>${f.league}</span><span>🕒 ${f.time}</span></div>
-          <div><strong>${f.home} ${f.away ? 'vs '+f.away : ''}</strong></div>
-          <button class="secondary" style="margin-top:8px;" onclick='quickAddBet("${f.home} vs ${f.away || ''}")'>➕ Weka dau</button>
+          <div><strong>${f.home} vs ${f.away}</strong></div>
+          <button class="secondary" style="margin-top:8px;" onclick='quickAddBet("${f.home} vs ${f.away}")'>➕ Weka dau</button>
         </div>`;
       });
     }
@@ -154,7 +223,6 @@
   }
 
   window.quickAddBet = (matchName) => {
-    // switch to mikeka tab and fill match input
     document.querySelector('.nav-btn[data-tab="mikeka"]').click();
     setTimeout(() => {
       let inp = document.getElementById('betMatch');
@@ -301,12 +369,11 @@
     renderPublic();
   };
 
-  // refresh mock data
+  // refresh data
   window.refreshData = () => {
-    generateMockData();
-    if (currentTab === 'home') renderHome();
-    else if (currentTab === 'fixtures') renderFixtures();
-    addToast("Data imeburudika");
+    fetchRealLiveScores();
+    fetchRealFixtures();
+    addToast("Data inaburudishwa...");
   };
 
   // Tab navigation
@@ -339,7 +406,9 @@
       return;
     }
     loadUserData(pin);
-    generateMockData(); // load mock live scores
+    // Load initial live data and fixtures
+    fetchRealLiveScores();
+    fetchRealFixtures();
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appScreen').style.display = 'block';
     switchTab('home');
@@ -348,8 +417,7 @@
       btn.addEventListener('click', (e) => switchTab(btn.getAttribute('data-tab')));
     });
     addToast(`Karibu ${pin === '1234' ? 'Mzee NJEM' : 'mchapishaji'}`);
-  });
-
+          
   // Allow enter key
   document.getElementById('pinInput').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') document.getElementById('loginBtn').click();
