@@ -103,12 +103,6 @@ const LOSS_STREAK_LIMIT=3;
 // LIVE SCORES — API-Sports (Real-time)
 // ═══════════════════════════════════════
 let APISPORTS_KEY = localStorage.getItem('njem_apisports_key') || '';
-// Alias — Admin panel uses API_SPORTS_KEY, rest uses APISPORTS_KEY
-Object.defineProperty(window, 'API_SPORTS_KEY', {
-  get: () => APISPORTS_KEY,
-  set: (v) => { APISPORTS_KEY = v; },
-  configurable: true
-});
 const SPORTSDB_KEY = '447279'; // TheSportsDB fallback
 
 // Map our league IDs to TheSportsDB league IDs
@@ -179,30 +173,32 @@ let liveEnabled = false;
 async function apiSportsFetch(endpoint) {
   if (!APISPORTS_KEY) return null;
   try {
-    const res = await fetch(`https://v3.football.api-sports.io${endpoint}`, {
+    const url = `https://v3.football.api-sports.io${endpoint}`;
+    const res = await fetch(url, {
+      method: 'GET',
       headers: {
         'x-apisports-key': APISPORTS_KEY
       }
     });
     if (!res.ok) {
-      console.warn('API-Sports error:', res.status, endpoint);
+      console.warn('API-Sports HTTP error:', res.status, url);
       return null;
     }
     const json = await res.json();
-    // API-Sports returns errors array when key is wrong
     if (json.errors && Object.keys(json.errors).length > 0) {
-      console.warn('API-Sports API error:', json.errors);
+      console.warn('API-Sports error response:', JSON.stringify(json.errors));
       return null;
     }
     return json;
   } catch(e) {
-    console.warn('API-Sports fetch failed:', e.message);
+    console.warn('API-Sports fetch exception:', e.message);
     return null;
   }
 }
-// Alias so apiSports() also works
+// apiSports() alias - used in fixture browser
 async function apiSports(endpoint) {
-  return apiSportsFetch('/' + endpoint.replace(/^\//,''));
+  const ep = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
+  return apiSportsFetch(ep);
 }
 
 async function fetchLiveScores() {
@@ -495,27 +491,21 @@ function refreshLiveUI() {
 // ═══════════════════════════════════════
 async function fetchTeamForm(teamName) {
   try {
-    // Use API-Sports if key available
     if (APISPORTS_KEY) {
-      // Search team by name
-      const searchData = await apiSportsFetch(`/teams?search=${encodeURIComponent(teamName)}`);
-      const team = (searchData?.response || [])[0];
+      const s = await apiSportsFetch(`/teams?search=${encodeURIComponent(teamName)}`);
+      const team = (s?.response||[])[0];
       if (!team) return null;
-      const teamId = team.team?.id;
-      if (!teamId) return null;
-      // Get current season fixtures (last 5 finished)
-      const currentYear = new Date().getFullYear();
-      const season = new Date().getMonth() >= 7 ? currentYear : currentYear - 1;
-      const fixtData = await apiSportsFetch(`/fixtures?team=${teamId}&last=5&status=FT`);
-      const events = (fixtData?.response || []).map(fix => ({
-        strHomeTeam: fix.teams?.home?.name,
-        strAwayTeam: fix.teams?.away?.name,
-        intHomeScore: fix.goals?.home,
-        intAwayScore: fix.goals?.away,
+      const tid = team.team?.id;
+      const f = await apiSportsFetch(`/fixtures?team=${tid}&last=5&status=FT`);
+      const events = (f?.response||[]).map(x=>({
+        strHomeTeam: x.teams?.home?.name,
+        strAwayTeam: x.teams?.away?.name,
+        intHomeScore: x.goals?.home,
+        intAwayScore: x.goals?.away,
       }));
-      return { team: { strTeam: team.team?.name, idTeam: teamId }, events };
+      return { team, events };
     }
-    // Fallback TheSportsDB
+    // TheSportsDB fallback
     const res = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/searchteams.php?t=${encodeURIComponent(teamName)}`);
     const data = await res.json();
     const team = (data.teams||[])[0];
@@ -529,23 +519,22 @@ async function fetchTeamForm(teamName) {
 async function fetchH2H(homeTeam, awayTeam) {
   try {
     if (APISPORTS_KEY) {
-      // Search both teams
-      const [homeSearch, awaySearch] = await Promise.all([
+      const [hs, as] = await Promise.all([
         apiSportsFetch(`/teams?search=${encodeURIComponent(homeTeam)}`),
         apiSportsFetch(`/teams?search=${encodeURIComponent(awayTeam)}`),
       ]);
-      const homeId = (homeSearch?.response || [])[0]?.team?.id;
-      const awayId = (awaySearch?.response || [])[0]?.team?.id;
-      if (!homeId || !awayId) return [];
-      const h2hData = await apiSportsFetch(`/fixtures/headtohead?h2h=${homeId}-${awayId}&last=5`);
-      return (h2hData?.response || []).map(fix => ({
-        strHomeTeam: fix.teams?.home?.name,
-        strAwayTeam: fix.teams?.away?.name,
-        intHomeScore: fix.goals?.home,
-        intAwayScore: fix.goals?.away,
+      const hid = (hs?.response||[])[0]?.team?.id;
+      const aid = (as?.response||[])[0]?.team?.id;
+      if (!hid || !aid) return [];
+      const h2h = await apiSportsFetch(`/fixtures/headtohead?h2h=${hid}-${aid}&last=5`);
+      return (h2h?.response||[]).map(x=>({
+        strHomeTeam: x.teams?.home?.name,
+        strAwayTeam: x.teams?.away?.name,
+        intHomeScore: x.goals?.home,
+        intAwayScore: x.goals?.away,
       }));
     }
-    // Fallback TheSportsDB
+    // TheSportsDB fallback
     const [homeData, awayData] = await Promise.all([
       fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/searchteams.php?t=${encodeURIComponent(homeTeam)}`).then(r=>r.json()),
       fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/searchteams.php?t=${encodeURIComponent(awayTeam)}`).then(r=>r.json()),
@@ -602,10 +591,6 @@ async function showAIAnalysis(teamsStr) {
   const homeTeam = parts[0].trim();
   const awayTeam = parts[1].trim();
 
-  if (!APISPORTS_KEY) {
-    return toast('Weka API-Sports key kwenye Admin ili AI ifanye kazi!', 'err');
-  }
-
   // Create modal
   const ov = document.createElement('div');
   ov.className = 'modal-overlay';
@@ -622,7 +607,7 @@ async function showAIAnalysis(teamsStr) {
       <div id="ai-content">
         <div style="text-align:center;padding:2rem;color:var(--muted)">
           <div class="spinner" style="margin:0 auto 1rem"></div>
-          <div style="font-size:13px">🤖 Inatafuta timu kwenye API-Sports...</div>
+          <div style="font-size:13px">🤖 AI inachambua mechi...</div>
           <div style="font-size:11px;margin-top:4px">Form · H2H · Statistics</div>
         </div>
       </div>
@@ -639,18 +624,6 @@ async function showAIAnalysis(teamsStr) {
       fetchTeamForm(awayTeam),
       fetchH2H(homeTeam, awayTeam),
     ]);
-
-    // If both teams not found, show helpful error
-    if (!homeFormData && !awayFormData) {
-      dc.innerHTML = `<div style="text-align:center;color:var(--muted);padding:2rem">
-        <div style="font-size:32px">🔍</div>
-        <div style="margin-top:8px;font-size:13px;color:var(--warn)">Timu hazipatikani</div>
-        <div style="font-size:11px;margin-top:8px;color:var(--muted)">Hakikisha jina la timu ni kwa Kiingereza sahihi</div>
-        <div style="font-size:11px;margin-top:4px">Mfano: <strong style="color:var(--accent)">Arsenal</strong> badala ya <strong style="color:var(--loss)">Arsenal FC</strong></div>
-        <div style="font-size:11px;margin-top:4px">Au: <strong style="color:var(--accent)">Man United</strong> badala ya <strong style="color:var(--loss)">Manchester United</strong></div>
-      </div>`;
-      return;
-    }
 
     const homeStats = analyzeForm(homeFormData?.events || [], homeTeam);
     const awayStats = analyzeForm(awayFormData?.events || [], awayTeam);
@@ -712,10 +685,10 @@ async function showAIAnalysis(teamsStr) {
       </div>
     `;
   } catch(e) {
-    if(dc) dc.innerHTML = `<div style="text-align:center;color:var(--muted);padding:2rem">
+    dc.innerHTML = `<div style="text-align:center;color:var(--muted);padding:2rem">
       <div style="font-size:32px">⚠️</div>
-      <div style="margin-top:8px;font-size:13px;color:var(--warn)">Hitilafu: ${e.message}</div>
-      <div style="font-size:11px;margin-top:4px">Jaribu tena au angalia API-Sports key yako</div>
+      <div style="margin-top:8px;font-size:13px">Data haipatikani kwa timu hizi</div>
+      <div style="font-size:11px;margin-top:4px">Hakikisha jina la timu ni sahihi</div>
     </div>`;
   }
 }
@@ -855,7 +828,7 @@ async function showMatchDetailsModal(teamsStr, eventId) {
     let eventData = null;
     let timeline = [];
 
-    if (eventId && API_SPORTS_KEY) {
+    if (eventId && APISPORTS_KEY) {
       // Fetch live stats from API-Sports
       const statsData = await apiSports(`fixtures/statistics?fixture=${eventId}`);
       if (statsData?.response?.length >= 2) {
@@ -1191,14 +1164,27 @@ async function showFixtureBrowser() {
     const dl = document.getElementById('fix-date-label');
     if(dl) dl.textContent = selectedDate;
 
-    if (!API_SPORTS_KEY) {
+    if (!APISPORTS_KEY) {
       fl.innerHTML = `<div style="text-align:center;color:var(--muted);padding:2rem">
         <div style="font-size:32px">🔑</div>
         <div style="margin-top:8px;font-size:13px">Weka API-Sports key kwenye Admin kwanza</div>
       </div>`; return;
     }
 
-    const data = await apiSports(`fixtures?league=${leagueId}&date=${selectedDate}&timezone=Africa/Dar_es_Salaam`);
+    // Show loading clearly
+    fl.innerHTML = `<div class="center"><div class="spinner"></div><div style="font-size:12px;color:var(--muted);margin-top:8px">Inapakia fixtures...</div></div>`;
+
+    const data = await apiSportsFetch(`/fixtures?league=${leagueId}&date=${selectedDate}&timezone=Africa/Dar_es_Salaam`);
+
+    if (!data) {
+      fl.innerHTML = `<div style="text-align:center;color:var(--muted);padding:2rem">
+        <div style="font-size:32px">❌</div>
+        <div style="margin-top:8px;font-size:13px;color:var(--danger)">API-Sports haikujibu</div>
+        <div style="font-size:11px;margin-top:6px">Angalia console (F12) kwa maelezo zaidi</div>
+        <div style="font-size:11px;margin-top:4px;color:var(--warn)">Key: ${APISPORTS_KEY.slice(0,8)}...</div>
+      </div>`; return;
+    }
+
     const fixtures = data?.response || [];
 
     if (!fixtures.length) {
@@ -1798,11 +1784,10 @@ function renderLiveSection() {
 function renderFixtures(c){
   c.innerHTML=`
     <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:.5rem">📅 Fixtures</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:1rem">Angalia mechi za leo na siku zijazo</div>
-    <button onclick="window._showFixtures()" class="btn-primary">🔍 Fungua Fixture Browser</button>
-    <div style="font-size:11px;color:${APISPORTS_KEY?'var(--win)':'var(--warn)'};text-align:center;padding:1rem">
-      ${APISPORTS_KEY ? '✅ API-Sports ipo — bonyeza hapo juu' : '⚠️ Weka API-Sports key kwenye Admin kwanza'}
-    </div>`;
+    <div style="margin-bottom:1rem;padding:.65rem .9rem;border-radius:12px;border:1px solid ${APISPORTS_KEY?'rgba(0,255,133,.3)':'rgba(255,170,0,.3)'};background:${APISPORTS_KEY?'rgba(0,255,133,.06)':'rgba(255,170,0,.06)'};font-size:12px;color:${APISPORTS_KEY?'var(--win)':'var(--warn)'}">
+      ${APISPORTS_KEY ? '✅ API-Sports ipo — fixtures zinapatikana' : '⚠️ Weka API-Sports key kwenye ⚙️ Admin kwanza'}
+    </div>
+    <button onclick="window._showFixtures()" class="btn-primary">📅 Fungua Fixture Browser</button>`;
 }
 
 // FEED
@@ -2177,53 +2162,50 @@ function renderReports(c){
 
 // ADMIN
 async function renderAdmin(c){
-  // Guard: only owner
   if(currentUser.role !== 'owner'){
-    c.innerHTML=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted)"><div style="font-size:44px">🔒</div><div style="margin-top:8px">Unahitaji role ya <strong style="color:var(--accent)">Owner</strong> kufikia Admin</div></div>`;
+    c.innerHTML=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted)"><div style="font-size:44px">🔒</div><div style="margin-top:8px">Unahitaji role ya <strong style="color:var(--accent)">Owner</strong></div></div>`;
     return;
   }
   c.innerHTML=`<div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:1rem">⚙️ Admin</div><div class="center"><div class="spinner"></div></div>`;
-
   const{data:users}=await sb.from('users').select('*');
   const{data:allMk}=await sb.from('mikeka').select('*,matches(*),users(name)').order('created_at',{ascending:false});
   const won=(allMk||[]).filter(m=>m.status==='WON'),staked=(allMk||[]).reduce((s,m)=>s+(m.stake||0),0);
-
   c.innerHTML=`
     <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:1rem">⚙️ Admin Dashboard</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1rem">
       ${[['👥',(users||[]).length,'Watumiaji','var(--text)'],['📋',(allMk||[]).length,'Mikeka Yote','var(--text)'],['🏆',won.length,'Zilizoshinda','var(--win)'],['💸',fmt(staked),'Total Staked','var(--accent)']].map(([ic,v,l,col])=>`<div class="stat-box"><div class="stat-icon">${ic}</div><div class="stat-val" style="color:${col}">${v}</div><div class="stat-label">${l}</div></div>`).join('')}
     </div>
 
-    <!-- MANUAL SETTLE PANEL -->
-    <div class="card" style="border-color:rgba(0,255,133,.3);margin-bottom:1rem">
-      <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:4px">✅ Settle Mikeka — Admin Override</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Bonyeza status kubadilisha, au bonyeza WIN/LOSS kwa kila mechi</div>
-      ${(allMk||[]).slice(0,30).map(mk=>`
-        <div style="background:rgba(0,0,0,.25);border:1px solid var(--border);border-radius:12px;padding:.75rem;margin-bottom:.6rem">
+    <!-- SETTLE PANEL -->
+    <div class="card" style="border-color:rgba(0,255,133,.25);margin-bottom:1rem">
+      <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:4px">✅ Settle Mikeka — Admin</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Bonyeza WON/LOST/VOID kubadilisha hali, au WIN/LOSS kwa kila mechi</div>
+      ${(allMk||[]).length===0?'<div class="empty" style="padding:1rem">Hakuna mikeka</div>':
+        (allMk||[]).map(mk=>`
+        <div style="background:rgba(0,0,0,.2);border:1px solid var(--border);border-radius:12px;padding:.75rem;margin-bottom:.6rem">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
             <div>
               <div style="font-size:12px;font-weight:700">${mk.name||'Mkeka'}</div>
-              <div style="font-size:10px;color:var(--muted)">${mk.users?.name||'?'} · ${mk.date} · ${(mk.total_odds||1).toFixed(2)}x · TZS ${fmt(mk.potential_return||0)}</div>
+              <div style="font-size:10px;color:var(--muted)">${mk.users?.name||'?'} · ${mk.date} · TZS ${fmt(mk.potential_return||0)}</div>
             </div>
             <div style="background:${sc(mk.status)}22;color:${sc(mk.status)};padding:.15rem .5rem;border-radius:10px;font-size:10px;font-weight:700">${mk.status}</div>
           </div>
           <div style="display:flex;gap:4px;margin-bottom:6px">
-            ${['PENDING','WON','LOST','VOID'].map(s=>`<button onclick="window._adminSettle('${mk.id}','${s}','${mk.user_id}',${mk.potential_return||0},${mk.stake||0})"
+            ${['WON','LOST','VOID','PENDING'].map(s=>`<button onclick="window._adSettle('${mk.id}','${s}','${mk.user_id}',${mk.potential_return||0},${mk.stake||0})"
               style="flex:1;padding:.3rem;border-radius:8px;border:1.5px solid ${mk.status===s?sc(s):'var(--border)'};background:${mk.status===s?sc(s)+'22':'transparent'};color:${mk.status===s?sc(s):'var(--muted)'};font-size:10px;font-weight:700;cursor:pointer">${s}</button>`).join('')}
           </div>
           ${(mk.matches||[]).map(match=>`
-            <div style="padding:.4rem 0;border-top:1px solid #0d1f14">
-              <div style="font-size:11px;color:var(--muted);margin-bottom:3px">${lgFlag(match.league)} ${match.teams} · ${match.market} · <strong>${match.pick}</strong> @ ${match.odds}x</div>
-              <div style="display:flex;gap:4px">
-                ${['WIN','LOSS','VOID','PENDING'].map(o=>`<button onclick="window._adminMatchOut('${mk.id}','${match.id}','${o}','${mk.user_id}',${mk.potential_return||0},${mk.stake||0})"
-                  style="flex:1;padding:.25rem;border-radius:6px;border:1px solid ${(match.outcome||'PENDING')===o?(o==='WIN'?'var(--win)':o==='LOSS'?'var(--loss)':'var(--muted)'):'var(--border)'};background:${(match.outcome||'PENDING')===o?(o==='WIN'?'rgba(0,255,133,.2)':o==='LOSS'?'rgba(255,68,68,.2)':'rgba(255,255,255,.05)'):'transparent'};color:${(match.outcome||'PENDING')===o?(o==='WIN'?'var(--win)':o==='LOSS'?'var(--loss)':'var(--text)'):'var(--muted)'};font-size:9px;font-weight:700;cursor:pointer">${o}</button>`).join('')}
+            <div style="padding:.4rem 0;border-top:1px solid rgba(255,255,255,.04)">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:3px">${lgFlag(match.league)} ${match.teams} · ${match.market} · <b>${match.pick}</b> @${match.odds}x</div>
+              <div style="display:flex;gap:3px">
+                ${['WIN','LOSS','VOID','PENDING'].map(o=>{const cur=match.outcome||'PENDING';const active=cur===o;return`<button onclick="window._adMatchOut('${mk.id}','${match.id}','${o}','${mk.user_id}',${mk.potential_return||0},${mk.stake||0})"
+                  style="flex:1;padding:.25rem;border-radius:6px;border:1px solid ${active?(o==='WIN'?'var(--win)':o==='LOSS'?'var(--loss)':'var(--muted)'):'var(--border)'};background:${active?(o==='WIN'?'rgba(0,255,133,.2)':o==='LOSS'?'rgba(255,68,68,.2)':'rgba(255,255,255,.07)'):'transparent'};color:${active?(o==='WIN'?'var(--win)':o==='LOSS'?'var(--loss)':'var(--text)'):'var(--muted)'};font-size:9px;font-weight:700;cursor:pointer">${o}</button>`;}).join('')}
               </div>
             </div>`).join('')}
-        </div>`).join('')||'<div class="empty" style="padding:1rem">Hakuna mikeka bado</div>'}
+        </div>`).join('')}
     </div>
 
-    <!-- Users -->
-    <div class="card">
+    <div class="card" style="margin-bottom:.75rem">
       <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px">👥 Simamia Watumiaji</div>
       ${(users||[]).map(u=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:.65rem 0;border-bottom:1px solid var(--border)">
         <div><div style="font-weight:600;font-size:13px">${u.name}</div><div style="font-size:10px;color:var(--muted)">${u.phone}</div></div>
@@ -2235,72 +2217,60 @@ async function renderAdmin(c){
         </div>
       </div>`).join('')}
     </div>
-
-    <!-- API-Sports Key -->
-    <div class="card" style="border-color:rgba(255,170,0,.3);margin-top:.75rem">
+    <div class="card" style="border-color:rgba(255,170,0,.3)">
       <div style="font-size:12px;font-weight:700;color:var(--warn);margin-bottom:6px">⚽ API-Sports Key — Live Scores + Fixtures + AI</div>
-      <div style="font-size:11px;color:${APISPORTS_KEY?'var(--win)':'var(--warn)'};margin-bottom:8px">${APISPORTS_KEY?'✅ Key ipo — API inaendesha fixtures na AI':'⚠️ Hakuna key — Fixtures na AI hazifanyi kazi'}</div>
+      <div style="font-size:11px;margin-bottom:8px;color:${APISPORTS_KEY?'var(--win)':'var(--warn)'}">
+        ${APISPORTS_KEY?'✅ Key ipo: '+APISPORTS_KEY.slice(0,12)+'...':'⚠️ Hakuna key — Fixtures na AI hazifanyi kazi'}
+      </div>
       <input class="inp" id="apisports-key" placeholder="Paste API-Sports key hapa..." style="margin-bottom:8px" value="${APISPORTS_KEY}"/>
       <button onclick="window._saveApiSports()" class="btn-ghost" style="border-color:var(--warn);color:var(--warn);margin-bottom:8px">💾 Hifadhi API-Sports Key</button>
       <div style="font-size:11px;color:var(--muted)">Pata key bure (100 req/siku): <a href="https://dashboard.api-sports.io" target="_blank" style="color:var(--warn)">dashboard.api-sports.io</a></div>
     </div>
-    <!-- OpenRouter Key -->
     <div class="card" style="border-color:rgba(77,166,255,.3);margin-top:.75rem">
       <div style="font-size:12px;font-weight:700;color:var(--info);margin-bottom:6px">🤖 OpenRouter AI — Betslip OCR</div>
-      <div style="font-size:11px;color:${GEMINI_KEY?'var(--win)':'var(--muted)'};margin-bottom:8px">${GEMINI_KEY?'✅ OpenRouter key ipo':'⚠️ Hakuna key — OCR haifanyi kazi'}</div>
+      <div style="font-size:11px;margin-bottom:8px;color:${GEMINI_KEY?'var(--win)':'var(--muted)'}">
+        ${GEMINI_KEY?'✅ Key ipo':'⚠️ Hakuna key — OCR haifanyi kazi'}
+      </div>
       <input class="inp" id="gemini-key" placeholder="Paste OpenRouter API key hapa (sk-or-v1-...)" style="margin-bottom:8px" value="${GEMINI_KEY}"/>
       <button onclick="window._saveGemini()" class="btn-ghost">💾 Hifadhi OpenRouter Key</button>
       <div style="font-size:11px;color:var(--muted);margin-top:8px">Pata key bure: <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent)">openrouter.ai/keys</a></div>
     </div>`;
 
   window._role=async(uid,role)=>{await sb.from('users').update({role}).eq('id',uid);toast(`Role → ${ROLES[role]}`);};
-  window._saveGemini=()=>{GEMINI_KEY=el('gemini-key')?.value||'';localStorage.setItem('njem_or_key',GEMINI_KEY);localStorage.removeItem('njem_gemini_key');toast(GEMINI_KEY?'✅ OpenRouter key imehifadhiwa!':'Key ni empty','warn');renderAdmin(c);};
+  window._saveGemini=()=>{GEMINI_KEY=el('gemini-key')?.value?.trim()||'';localStorage.setItem('njem_or_key',GEMINI_KEY);localStorage.removeItem('njem_gemini_key');toast(GEMINI_KEY?'✅ OpenRouter key imehifadhiwa!':'Key ni empty','warn');renderAdmin(c);};
   window._saveApiSports=()=>{
     APISPORTS_KEY=el('apisports-key')?.value?.trim()||'';
     localStorage.setItem('njem_apisports_key',APISPORTS_KEY);
-    toast(APISPORTS_KEY?'✅ API-Sports key imehifadhiwa! Inaanza live scores...':'Key ni empty','warn');
+    toast(APISPORTS_KEY?`✅ Key imehifadhiwa! (${APISPORTS_KEY.slice(0,8)}...)`:'Key ni empty','warn');
     if(APISPORTS_KEY) fetchLiveScores();
     renderAdmin(c);
   };
-
-  window._adminSettle=async(mkId, newStatus, userId, potReturn, stake)=>{
+  window._adSettle=async(mkId,newStatus,userId,potReturn,stake)=>{
     await sb.from('mikeka').update({status:newStatus}).eq('id',mkId);
     if(newStatus==='WON'){
       const gain=(potReturn||0)-(stake||0);
-      const{data:mkUser}=await sb.from('users').select('bankroll').eq('id',userId).maybeSingle();
-      if(mkUser){
-        const newBk=(mkUser.bankroll||0)+gain;
-        await sb.from('users').update({bankroll:newBk}).eq('id',userId);
-        if(userId===currentUser.id) await updateUser({bankroll:newBk});
-        toast(`✅ WON settled! +TZS ${fmt(gain)}`,'ok');
-      }
-    } else {
-      toast(`✅ Settled: ${newStatus}`);
-    }
-    await loadData(); renderAdmin(c);
+      const{data:u}=await sb.from('users').select('bankroll').eq('id',userId).maybeSingle();
+      if(u){const nb=(u.bankroll||0)+gain;await sb.from('users').update({bankroll:nb}).eq('id',userId);if(userId===currentUser.id)await updateUser({bankroll:nb});}
+      toast(`✅ WON! +TZS ${fmt(gain)}`,'ok');
+    }else{toast(`Settled: ${newStatus}`);}
+    await loadData();renderAdmin(c);
   };
-
-  window._adminMatchOut=async(mkId, matchId, outcome, userId, potReturn, stake)=>{
+  window._adMatchOut=async(mkId,matchId,outcome,userId,potReturn,stake)=>{
     await sb.from('matches').update({outcome}).eq('id',matchId);
-    const{data:freshMatches}=await sb.from('matches').select('*').eq('mkeka_id',mkId);
-    const allDone=(freshMatches||[]).every(m=>m.outcome&&m.outcome!=='PENDING');
+    const{data:fm}=await sb.from('matches').select('*').eq('mkeka_id',mkId);
+    const allDone=(fm||[]).every(m=>m.outcome&&m.outcome!=='PENDING');
     if(allDone){
-      const hasLoss=(freshMatches||[]).some(m=>m.outcome==='LOSS');
-      const allVoid=(freshMatches||[]).every(m=>m.outcome==='VOID');
-      const newStatus=hasLoss?'LOST':allVoid?'VOID':'WON';
-      await sb.from('mikeka').update({status:newStatus}).eq('id',mkId);
-      if(newStatus==='WON'){
+      const hasLoss=(fm||[]).some(m=>m.outcome==='LOSS'),allVoid=(fm||[]).every(m=>m.outcome==='VOID');
+      const ns=hasLoss?'LOST':allVoid?'VOID':'WON';
+      await sb.from('mikeka').update({status:ns}).eq('id',mkId);
+      if(ns==='WON'){
         const gain=(potReturn||0)-(stake||0);
-        const{data:mkUser}=await sb.from('users').select('bankroll').eq('id',userId).maybeSingle();
-        if(mkUser){
-          const newBk=(mkUser.bankroll||0)+gain;
-          await sb.from('users').update({bankroll:newBk}).eq('id',userId);
-          if(userId===currentUser.id) await updateUser({bankroll:newBk});
-          toast(`🎉 Auto WON! +TZS ${fmt(gain)}`,'ok');
-        }
-      } else { toast(`Mkeka settled: ${newStatus}`); }
-    } else { toast(`Match → ${outcome}`,'info'); }
-    await loadData(); renderAdmin(c);
+        const{data:u}=await sb.from('users').select('bankroll').eq('id',userId).maybeSingle();
+        if(u){const nb=(u.bankroll||0)+gain;await sb.from('users').update({bankroll:nb}).eq('id',userId);if(userId===currentUser.id)await updateUser({bankroll:nb});}
+        toast(`🎉 WON! +TZS ${fmt(gain)}`,'ok');
+      }else{toast(`Settled: ${ns}`);}
+    }else{toast(`Match → ${outcome}`,'info');}
+    await loadData();renderAdmin(c);
   };
 }
 
