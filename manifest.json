@@ -21,7 +21,10 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["finance", "sports"],
+  "categories": [
+    "finance",
+    "sports"
+  ],
   "lang": "sw",
   "scope": "/"
 }
