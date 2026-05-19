@@ -102,11 +102,25 @@ async function fetchLiveScores() {
 
 function renderHome() {
   let html = `<h2 style="margin-bottom:15px">🔴 Live Scores</h2>`;
-  Object.keys(liveScores).slice(0,8).forEach(key => {
-    const m = liveScores[key];
-    html += `<div class="card"><small>\( {m.league}</small><br><strong> \){key}</strong><br>${m.home} - \( {m.away} <small> \){m.minute}</small></div>`;
-  });
-  document.getElementById('content').innerHTML = html || '<p>Hakuna mechi za live kwa sasa.</p>';
+
+  const matches = Object.keys(liveScores);
+
+  if (matches.length === 0) {
+    html += `<p style="color:#4a7a5a;text-align:center;padding:40px 0">Hakuna mechi za live kwa sasa...<br><small>Inaangalia kila sekunde 40</small></p>`;
+  } else {
+    matches.slice(0, 10).forEach(key => {
+      const m = liveScores[key];
+      html += `
+        <div class="card">
+          <small style="color:#4a7a5a">${m.league}</small><br>
+          <strong>${key}</strong><br>
+          <span style="font-size:18px;font-weight:700">${m.home} - ${m.away}</span>
+          <span style="float:right;color:var(--accent)">${m.minute}</span>
+        </div>`;
+    });
+  }
+
+  document.getElementById('content').innerHTML = html;
 }
 
 async function loadFixtures() {
