@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>NJEM Tipps v2.0 | Betting Tracker + Live Demo</title>
+  <title>NJEM Tipps - Login System</title>
   <meta name="theme-color" content="#00ff85">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
@@ -11,331 +11,349 @@
     :root {
       --bg: #05110a; --surface: #0c1f13; --border: #1a3522;
       --accent: #00ff85; --text: #e4f0e8; --muted: #4a7a5a;
-      --danger: #ff5e5e; --warning: #ffb347;
     }
-    body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--text); padding-bottom: 70px; }
-    .header {
-      background: rgba(12,31,19,0.97); border-bottom: 1px solid var(--border);
-      padding: 0.85rem 1.1rem; display: flex; align-items: center; justify-content: space-between;
-      position: sticky; top: 0; z-index: 100; backdrop-filter: blur(4px);
-    }
-    .header-title { font-family: 'Syne', sans-serif; font-size: 1.2rem; font-weight: 800; color: var(--accent); }
-    #bankroll-display { background: rgba(0,0,0,0.5); padding: 6px 12px; border-radius: 40px; font-size: 0.8rem; font-weight: 600; }
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 1rem; margin-bottom: 0.9rem; }
-    .card-header { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.75rem; color: var(--muted); }
-    .match-title { font-weight: 700; font-size: 1rem; margin: 0.3rem 0; }
-    .score { font-size: 1.7rem; font-weight: 800; letter-spacing: 2px; }
-    .badge-live { background: #ff4444; padding: 2px 8px; border-radius: 30px; font-size: 0.7rem; font-weight: bold; color: white; display: inline-flex; align-items: center; gap: 5px; }
-    button {
-      background: var(--accent); color: #05110a; border: none; padding: 8px 14px;
-      border-radius: 40px; font-weight: bold; cursor: pointer; font-size: 0.8rem;
-    }
+    body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--text); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .login-container, .app-container { max-width: 500px; width: 100%; margin: auto; background: var(--surface); border-radius: 32px; padding: 2rem 1.5rem; border: 1px solid var(--border); }
+    input, button { width: 100%; padding: 12px; margin-top: 12px; border-radius: 60px; border: none; font-size: 1rem; }
+    input { background: #0a1910; border: 1px solid var(--border); color: var(--text); text-align: center; }
+    button { background: var(--accent); color: #05110a; font-weight: bold; cursor: pointer; }
     button.secondary { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+    h2 { text-align: center; margin-bottom: 20px; color: var(--accent); font-family: 'Syne'; }
+    .error { color: #ff8888; text-align: center; margin-top: 12px; font-size: 0.85rem; }
+    .header-title { font-family: 'Syne'; font-size: 1.4rem; color: var(--accent); }
+    .card { background: rgba(0,0,0,0.2); border-radius: 24px; padding: 1rem; margin-bottom: 1rem; }
     .flex-between { display: flex; justify-content: space-between; align-items: center; }
-    input, select, textarea { background: #0a1910; border: 1px solid var(--border); padding: 10px; border-radius: 14px; color: var(--text); width: 100%; margin-bottom: 12px; font-family: inherit; }
-    .bottom-nav {
-      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
-      width: 100%; max-width: 500px; background: rgba(12,31,19,0.97);
-      border-top: 1px solid var(--border); display: flex; z-index: 100;
-    }
-    .nav-btn { flex: 1; background: none; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0.6rem 0.2rem; }
-    .nav-label { font-size: 0.7rem; color: var(--muted); font-weight: 500; }
-    .nav-label.active { color: var(--accent); font-weight: 700; }
-    #toast-container { position: fixed; top: 16px; right: 16px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
-    .toast { background: #0c1f13; border-left: 4px solid var(--accent); padding: 0.7rem 1rem; border-radius: 14px; font-weight: 500; font-size: 0.8rem; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-    .live-dot { width: 9px; height: 9px; background: #ff4444; border-radius: 50%; display: inline-block; margin-right: 6px; animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0%,100%{ opacity: 1; } 50%{ opacity: 0.3; } }
-    .bet-item { background: #0a1910; border-radius: 16px; padding: 12px; margin-bottom: 10px; }
-    .text-accent { color: var(--accent); }
-    .text-muted { color: var(--muted); }
-    .demo-badge { background: var(--warning); color: #000; font-size: 10px; padding: 2px 8px; border-radius: 20px; display: inline-block; margin-left: 8px; }
+    .live-dot { display: inline-block; width: 10px; height: 10px; background: #ff4444; border-radius: 50%; margin-right: 6px; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%{ opacity: 1; } 50%{ opacity: 0.3; } }
+    .badge-live { background: #ff4444; padding: 2px 8px; border-radius: 30px; font-size: 0.7rem; }
+    .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); display: flex; padding: 0.5rem; z-index: 100; max-width: 500px; margin: auto; }
+    .nav-btn { flex: 1; background: none; border: none; color: var(--muted); font-weight: 600; padding: 8px; cursor: pointer; }
+    .nav-btn.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+    .toast { position: fixed; top: 20px; right: 20px; background: var(--surface); border-left: 4px solid var(--accent); padding: 10px 15px; border-radius: 16px; z-index: 999; }
   </style>
 </head>
 <body>
-<div id="toast-container"></div>
-<div id="loading-screen" style="min-height:100vh; background:#05110a; display:flex; flex-direction:column; align-items:center; justify-content:center;">
-  <div style="font-family:'Syne',sans-serif; font-size:28px; color:#00ff85">NJEM TIPPS</div>
-  <p style="color:#4a7a5a; margin-top:10px;">Inaandaa data ya mfano...</p>
-  <div class="live-dot" style="background:#00ff85"></div>
+<div id="loginScreen" class="login-container">
+  <h2>🔐 NJEM TIPPS</h2>
+  <p style="text-align:center; margin-bottom:20px;">Ingiza PIN yako (default: 1234)</p>
+  <input type="password" id="pinInput" placeholder="PIN kwa namba 4" maxlength="6" inputmode="numeric">
+  <button id="loginBtn">Ingia</button>
+  <div id="loginError" class="error"></div>
+  <div style="margin-top:20px; text-align:center; font-size:12px; color:#4a7a5a;">💡 Bado huna akaunti? Tumia PIN 1234 au weka PIN yoyote mpya (itahifadhiwa)</div>
 </div>
 
-<div id="app" style="display:none; max-width:500px; margin:0 auto; min-height:100vh;">
-  <div class="header">
-    <div class="header-title">NJEM TIPPS v2.0 <span class="demo-badge">Demo</span></div>
-    <div id="bankroll-display">💵 Bankroll: TZS 0</div>
+<div id="appScreen" style="display:none; max-width:500px; margin:0 auto; min-height:100vh; padding-bottom:70px;">
+  <div class="app-container" style="border-radius:0; background:transparent; padding:1rem;">
+    <div class="flex-between">
+      <div class="header-title">NJEM TIPPS</div>
+      <div id="bankrollDisplay" style="background:#00000066; padding:5px 12px; border-radius:30px;">💵 TZS 0</div>
+      <button class="secondary" style="width:auto; padding:5px 10px; margin:0;" onclick="logout()">🚪 Toka</button>
+    </div>
+    <div id="mainContent" style="margin-top: 1rem;"></div>
   </div>
-  <div id="content" style="padding: 1rem;"></div>
   <div class="bottom-nav">
-    <button class="nav-btn" onclick="switchTab('home')"><span class="nav-label active" id="nav-home">🏠 Home</span></button>
-    <button class="nav-btn" onclick="switchTab('fixtures')"><span class="nav-label" id="nav-fixtures">📅 Fixtures</span></button>
-    <button class="nav-btn" onclick="switchTab('mikeka')"><span class="nav-label" id="nav-mikeka">📋 Mikeka Yangu</span></button>
-    <button class="nav-btn" onclick="switchTab('public')"><span class="nav-label" id="nav-public">🌍 Public</span></button>
+    <button class="nav-btn" data-tab="home">🏠 Home</button>
+    <button class="nav-btn" data-tab="fixtures">📅 Fixtures</button>
+    <button class="nav-btn" data-tab="mikeka">📋 Mikeka</button>
+    <button class="nav-btn" data-tab="public">🌍 Public</button>
   </div>
 </div>
 
 <script>
-  // ======================= DATA SIMULATION =======================
-  let liveScores = {};
-  let fixturesList = [];
-  let myBets = [];
-  let publicTips = [];
-  let bankroll = 125000;
+  // ----------------------- SYSTEM LOGIN / USER MANAGEMENT -----------------------
+  let currentUserPIN = null;
+  let userData = {}; // structure: { bankroll, myBets, publicTips }
 
-  // Mock data for live matches (ili kuonyesha kazi)
-  function generateMockData() {
-    // Live matches za mfano (zina update kila sekunde 30)
-    const now = new Date();
-    const minutes = now.getMinutes();
-    const mockLive = {
-      "Simba SC vs Young Africans": { home: Math.floor(Math.random()*2), away: Math.floor(Math.random()*2), minute: `${Math.floor(Math.random()*80)+10}'`, league: "NBC Premier League" },
-      "Al Ahly vs Zamalek": { home: Math.floor(Math.random()*3), away: Math.floor(Math.random()*2), minute: `${Math.floor(Math.random()*70)+20}'`, league: "Egyptian League" },
-      "Manchester City vs Arsenal": { home: Math.floor(Math.random()*2)+1, away: Math.floor(Math.random()*2), minute: `${Math.floor(Math.random()*60)+30}'`, league: "Premier League" }
-    };
-    // Randomly update scores
-    for (let key in mockLive) {
-      if (Math.random() > 0.7) {
-        mockLive[key].home += Math.random() > 0.8 ? 1 : 0;
-        mockLive[key].away += Math.random() > 0.8 ? 1 : 0;
-      }
+  // Simpan data per user berdasarkan PIN
+  function saveUserData() {
+    if (!currentUserPIN) return;
+    let allUsers = JSON.parse(localStorage.getItem('njem_users')) || {};
+    allUsers[currentUserPIN] = userData;
+    localStorage.setItem('njem_users', JSON.stringify(allUsers));
+  }
+
+  function loadUserData(pin) {
+    let allUsers = JSON.parse(localStorage.getItem('njem_users')) || {};
+    if (allUsers[pin]) {
+      userData = allUsers[pin];
+    } else {
+      // user baru, init default
+      userData = {
+        bankroll: 125000,
+        myBets: [],
+        publicTips: []
+      };
+      allUsers[pin] = userData;
+      localStorage.setItem('njem_users', JSON.stringify(allUsers));
     }
-    liveScores = mockLive;
-
-    // Fixtures za leo
-    fixturesList = [
-      { home: "Azam FC", away: "Namungo", time: "16:00", league: "NBC PL", date: "2025-05-19" },
-      { home: "Singida Fountain Gate", away: "Kagera Sugar", time: "18:30", league: "NBC PL", date: "2025-05-19" },
-      { home: "Barcelona", away: "Real Madrid", time: "22:00", league: "La Liga", date: "2025-05-19" }
-    ];
-  }
-
-  // Simulate API call (badala ya kutumia key iliyokataa)
-  async function fetchLiveAndFixtures() {
-    generateMockData(); // hii inatoa data ya mfano inayobadilika kidogo
-    if (currentTab === 'home') renderHome();
-    if (currentTab === 'fixtures') renderFixtures();
-    toast("✅ Data ya mfano imepakiwa (API halisi haifanyi kazi kwa sasa)", false);
-  }
-
-  // Helper functions
-  function toast(msg, isError = false) {
-    const t = document.createElement('div');
-    t.className = 'toast';
-    t.style.borderLeftColor = isError ? '#ff5e5e' : '#00ff85';
-    t.textContent = msg;
-    document.getElementById('toast-container').appendChild(t);
-    setTimeout(() => t.remove(), 4000);
-  }
-
-  function updateBankrollUI() {
-    document.getElementById('bankroll-display').innerHTML = `💵 Bankroll: TZS ${bankroll.toLocaleString()}`;
-    localStorage.setItem('njembankroll', bankroll);
-  }
-
-  function loadLocalData() {
-    const saved = localStorage.getItem('njembankroll');
-    if (saved) bankroll = parseInt(saved);
-    const savedBets = localStorage.getItem('njemMyBets');
-    if (savedBets) myBets = JSON.parse(savedBets);
-    const savedTips = localStorage.getItem('njemPublicTips');
-    if (savedTips) publicTips = JSON.parse(savedTips);
+    currentUserPIN = pin;
     updateBankrollUI();
   }
 
-  function saveMyBets() { localStorage.setItem('njemMyBets', JSON.stringify(myBets)); if(currentTab==='mikeka') renderMikeka(); }
-  function savePublicTips() { localStorage.setItem('njemPublicTips', JSON.stringify(publicTips)); if(currentTab==='public') renderPublic(); }
+  function updateBankrollUI() {
+    const el = document.getElementById('bankrollDisplay');
+    if (el) el.innerHTML = `💵 TZS ${userData.bankroll?.toLocaleString() || 0}`;
+  }
 
-  // RENDERING
+  function addToast(msg, isErr = false) {
+    let toastDiv = document.createElement('div');
+    toastDiv.className = 'toast';
+    toastDiv.style.borderLeftColor = isErr ? '#ff5e5e' : '#00ff85';
+    toastDiv.innerText = msg;
+    document.body.appendChild(toastDiv);
+    setTimeout(() => toastDiv.remove(), 3500);
+  }
+
+  // ----------------------- MOCK DATA FOR LIVE & FIXTURES (no API) -----------------------
+  let liveScores = {};
+  let fixturesList = [];
+
+  function generateMockData() {
+    // Live matches
+    liveScores = {
+      "Simba SC vs Young Africans": { home: Math.floor(Math.random()*3), away: Math.floor(Math.random()*2), minute: `${Math.floor(Math.random()*75)+15}'`, league: "NBC Premier" },
+      "Al Ahly vs Zamalek": { home: Math.floor(Math.random()*2), away: Math.floor(Math.random()*2), minute: `${Math.floor(Math.random()*60)+30}'`, league: "Egypt League" },
+      "Manchester City vs Liverpool": { home: Math.floor(Math.random()*2)+1, away: Math.floor(Math.random()*2), minute: `${Math.floor(Math.random()*50)+40}'`, league: "EPL" }
+    };
+    fixturesList = [
+      { home: "Azam FC", away: "Namungo", time: "16:00", league: "NBC PL" },
+      { home: "Singida BG", away: "Kagera Sugar", time: "18:30", league: "NBC PL" },
+      { home: "Barcelona vs Real Madrid", away: "", time: "22:00", league: "La Liga" }
+    ];
+  }
+
+  // ----------------------- RENDERS -----------------------
   function renderHome() {
-    const container = document.getElementById('content');
-    let html = `<div class="flex-between"><h2><span class="live-dot"></span> Live Scores</h2><button class="secondary" onclick="fetchLiveAndFixtures()">🔄 Refresh</button></div>`;
-    if (Object.keys(liveScores).length === 0) {
-      html += `<div class="card" style="text-align:center;">Hakuna mechi za live kwa sasa (demo data inajaribu kuleta)...</div>`;
-    } else {
+    let html = `<div class="flex-between"><h3><span class="live-dot"></span> Live Scores</h3><button class="secondary" onclick="refreshData()">🔄 Refresh</button></div>`;
+    if (Object.keys(liveScores).length === 0) html += `<div class="card">Hakuna mechi za live</div>`;
+    else {
       for (let [match, data] of Object.entries(liveScores)) {
         html += `<div class="card">
-          <div class="card-header"><span>${data.league}</span><span class="badge-live"><span class="live-dot" style="background:white;"></span> LIVE ${data.minute}</span></div>
-          <div class="match-title">${match}</div>
-          <div class="score">${data.home}  -  ${data.away}</div>
+          <div class="flex-between"><small>${data.league}</small><span class="badge-live">LIVE ${data.minute}</span></div>
+          <div style="font-weight:bold; margin:8px 0;">${match}</div>
+          <div class="flex-between"><span style="font-size:24px;">${data.home} - ${data.away}</span></div>
         </div>`;
       }
     }
-    container.innerHTML = html;
+    document.getElementById('mainContent').innerHTML = html;
   }
 
   function renderFixtures() {
-    const container = document.getElementById('content');
-    let html = `<div class="flex-between"><h2>📅 Mechi za Leo</h2><button class="secondary" onclick="fetchLiveAndFixtures()">Refresh</button></div>`;
+    let html = `<h3>📅 Mechi za Leo</h3>`;
     if (fixturesList.length === 0) html += `<div class="card">Hakuna fixtures</div>`;
     else {
       fixturesList.forEach(f => {
         html += `<div class="card">
-          <div class="card-header"><span>${f.league}</span><span>🕒 ${f.time}</span></div>
-          <div class="match-title">${f.home} vs ${f.away}</div>
-          <button class="secondary" style="margin-top:8px; width:100%;" onclick='quickAddBet("${f.home} vs ${f.away}")'>➕ Weka dau</button>
+          <div class="flex-between"><span>${f.league}</span><span>🕒 ${f.time}</span></div>
+          <div><strong>${f.home} ${f.away ? 'vs '+f.away : ''}</strong></div>
+          <button class="secondary" style="margin-top:8px;" onclick='quickAddBet("${f.home} vs ${f.away || ''}")'>➕ Weka dau</button>
         </div>`;
       });
     }
-    container.innerHTML = html;
+    document.getElementById('mainContent').innerHTML = html;
   }
 
-  window.quickAddBet = (match) => {
-    switchTab('mikeka');
+  window.quickAddBet = (matchName) => {
+    // switch to mikeka tab and fill match input
+    document.querySelector('.nav-btn[data-tab="mikeka"]').click();
     setTimeout(() => {
-      const inp = document.getElementById('betMatch');
-      if(inp) inp.value = match;
-      toast(`Tayari kuweka dau kwa ${match}`);
+      let inp = document.getElementById('betMatch');
+      if (inp) inp.value = matchName;
+      addToast(`Tayari kuweka dau: ${matchName}`);
     }, 100);
   };
 
   function renderMikeka() {
-    const container = document.getElementById('content');
-    let totalStake = myBets.filter(b=>b.status==='open').reduce((s,b)=>s+b.stake,0);
-    let potential = myBets.filter(b=>b.status==='open').reduce((s,b)=>s+(b.stake*b.odds),0);
-    let html = `<div class="flex-between"><h2>📋 Mikeka Yangu</h2><button class="secondary" onclick="resetBets()">🗑️ Reset</button></div>
-                <div class="card"><div class="flex-between"><span>💰 Jumla Stake:</span><span class="text-accent">TZS ${totalStake.toLocaleString()}</span></div>
-                <div class="flex-between"><span>🎯 Uwezekano wa kushinda:</span><span>TZS ${potential.toLocaleString()}</span></div></div>
-                <button onclick="showAddBetForm()" style="width:100%; margin-bottom:10px;">+ Weka Dau Jipya</button>
+    let bets = userData.myBets || [];
+    let totalStake = bets.filter(b=>b.status==='open').reduce((s,b)=>s+b.stake,0);
+    let potential = bets.filter(b=>b.status==='open').reduce((s,b)=>s+(b.stake*b.odds),0);
+    let html = `<div class="flex-between"><h3>📋 Mikeka Yangu</h3><button class="secondary" onclick="resetAllBets()">🗑️ Reset</button></div>
+                <div class="card"><div>💰 Jumla Stake: TZS ${totalStake.toLocaleString()}</div><div>🎯 Uwezo wa kushinda: TZS ${potential.toLocaleString()}</div></div>
+                <button onclick="showAddBetForm()" style="margin:10px 0;">+ Weka Dau Jipya</button>
                 <div id="addBetForm" style="display:none; background:var(--surface); border-radius:20px; padding:1rem; margin-bottom:1rem;">
-                  <input type="text" id="betMatch" placeholder="Mechi (eg. Simba vs Yanga)">
+                  <input type="text" id="betMatch" placeholder="Mechi (eg. Yanga vs Simba)">
                   <input type="number" id="betOdds" placeholder="Odds (mfano 2.15)" step="0.01">
                   <input type="number" id="betStake" placeholder="Kiasi (TZS)">
                   <select id="betPrediction"><option>1 (Home)</option><option>X (Draw)</option><option>2 (Away)</option></select>
                   <div class="flex-between"><button onclick="addBet()">Hifadhi</button><button class="secondary" onclick="closeBetForm()">Ghairi</button></div>
                 </div>
                 <div id="betsList">`;
-    if (myBets.length===0) html += `<div class="card text-muted" style="text-align:center;">Hakuna mikeka bado.</div>`;
+    if (bets.length === 0) html += `<div class="card">Hakuna mikeka bado.</div>`;
     else {
-      myBets.forEach((bet,idx) => {
-        let statusBadge = bet.status==='open' ? '🟢 Open' : (bet.status==='won' ? '🏆 WON' : '❌ Lost');
-        html += `<div class="bet-item">
-          <div class="flex-between"><strong>${bet.match}</strong><span class="text-accent">${bet.prediction}</span></div>
-          <div>Odds: ${bet.odds} | Stake: TZS ${bet.stake.toLocaleString()}</div>
-          <div>Win: TZS ${(bet.stake*bet.odds).toLocaleString()}</div>
+      bets.forEach((bet, idx) => {
+        let statusText = bet.status === 'open' ? '🟢 Open' : (bet.status === 'won' ? '🏆 WON' : '❌ Lost');
+        html += `<div class="card">
+          <div class="flex-between"><strong>${bet.match}</strong> <span class="text-accent">${bet.prediction}</span></div>
+          <div>Odds ${bet.odds} | Stake TZS ${bet.stake.toLocaleString()}</div>
+          <div>Kushinda: TZS ${(bet.stake*bet.odds).toLocaleString()}</div>
           <div class="flex-between" style="margin-top:8px;">
-            <span>${statusBadge}</span>
-            <div>${bet.status==='open' ? `<button class="secondary" onclick="settleBet(${idx},'won')">✔️ Shinda</button>
-            <button class="secondary" onclick="settleBet(${idx},'lost')">❌ Potea</button>` : ''}
+            ${statusText}
+            <div>${bet.status === 'open' ? `<button class="secondary" onclick="settleBet(${idx},'won')">✔️ Shinda</button> <button class="secondary" onclick="settleBet(${idx},'lost')">❌ Potea</button>` : ''}
             <button class="secondary" onclick="deleteBet(${idx})">🗑️</button></div>
           </div>
         </div>`;
       });
     }
     html += `</div>`;
-    container.innerHTML = html;
+    document.getElementById('mainContent').innerHTML = html;
   }
 
   window.showAddBetForm = () => { document.getElementById('addBetForm').style.display = 'block'; };
   window.closeBetForm = () => { document.getElementById('addBetForm').style.display = 'none'; };
   window.addBet = () => {
-    const match = document.getElementById('betMatch').value.trim();
-    const odds = parseFloat(document.getElementById('betOdds').value);
-    const stake = parseInt(document.getElementById('betStake').value);
-    const pred = document.getElementById('betPrediction').value;
-    if (!match || isNaN(odds) || isNaN(stake) || stake<=0 || odds<1.01) { toast("Angalia odds na stake", true); return; }
-    if (stake > bankroll) { toast("Bankroll haitoshi!", true); return; }
-    bankroll -= stake;
+    let match = document.getElementById('betMatch').value.trim();
+    let odds = parseFloat(document.getElementById('betOdds').value);
+    let stake = parseInt(document.getElementById('betStake').value);
+    let prediction = document.getElementById('betPrediction').value;
+    if (!match || isNaN(odds) || isNaN(stake) || stake <= 0 || odds < 1.01) { addToast("Angalia odds na stake", true); return; }
+    if (stake > userData.bankroll) { addToast("Bankroll haitoshi!", true); return; }
+    userData.bankroll -= stake;
+    userData.myBets = userData.myBets || [];
+    userData.myBets.push({ match, odds, stake, prediction, status: 'open', date: new Date().toISOString() });
+    saveUserData();
     updateBankrollUI();
-    myBets.push({ match, odds, stake, prediction: pred, status: 'open', date: new Date().toISOString() });
-    saveMyBets();
     closeBetForm();
-    toast(`Dau limewekwa: ${match}`);
-    if(currentTab==='mikeka') renderMikeka();
+    addToast(`Dau limewekwa: ${match}`);
+    renderMikeka();
   };
-  window.settleBet = (idx,res) => {
-    const bet = myBets[idx];
-    if(bet.status !== 'open') return;
-    if(res==='won') { bankroll += bet.stake * bet.odds; toast(`🎉 Umeshinda TZS ${(bet.stake*bet.odds).toLocaleString()}`); bet.status='won'; }
-    else { bet.status='lost'; toast(`❌ Dau limepotea: ${bet.match}`); }
+  window.settleBet = (idx, result) => {
+    let bet = userData.myBets[idx];
+    if (!bet || bet.status !== 'open') return;
+    if (result === 'won') {
+      userData.bankroll += bet.stake * bet.odds;
+      addToast(`🎉 Umeshinda TZS ${(bet.stake*bet.odds).toLocaleString()}`);
+      bet.status = 'won';
+    } else if (result === 'lost') {
+      bet.status = 'lost';
+      addToast(`❌ Dau limepotea: ${bet.match}`);
+    }
+    saveUserData();
     updateBankrollUI();
-    saveMyBets();
     renderMikeka();
   };
   window.deleteBet = (idx) => {
-    const bet = myBets[idx];
-    if(bet.status==='open') { bankroll += bet.stake; updateBankrollUI(); toast("Stake imerejeshwa"); }
-    myBets.splice(idx,1);
-    saveMyBets();
+    let bet = userData.myBets[idx];
+    if (bet.status === 'open') {
+      userData.bankroll += bet.stake;
+      addToast("Stake imerejeshwa");
+    }
+    userData.myBets.splice(idx, 1);
+    saveUserData();
+    updateBankrollUI();
     renderMikeka();
   };
-  window.resetBets = () => {
+  window.resetAllBets = () => {
     if(confirm("Futa mikeka yote na urejeshe bankroll TZS 125,000?")){
-      myBets=[]; bankroll=125000; updateBankrollUI(); saveMyBets(); renderMikeka();
-      toast("Mikeka imefutwa");
+      userData.myBets = [];
+      userData.bankroll = 125000;
+      saveUserData();
+      updateBankrollUI();
+      renderMikeka();
+      addToast("Imefutwa kabisa");
     }
   };
 
   // Public Tips
   function renderPublic() {
-    const container = document.getElementById('content');
-    let html = `<div class="flex-between"><h2>🌍 Vidokezo vya Umma</h2><button class="secondary" onclick="showAddTipForm()">➕ Toa Shauri</button></div>
-                <div id="addTipForm" style="display:none; background:var(--surface); border-radius:20px; padding:1rem; margin:1rem 0;">
-                  <input type="text" id="tipMatch" placeholder="Mechi">
-                  <input type="text" id="tipPrediction" placeholder="Utabiri (eg. Yanga win)">
-                  <input type="text" id="tipOdds" placeholder="Odds (hiari)">
-                  <textarea id="tipReason" rows="2" placeholder="Sababu..."></textarea>
+    let tips = userData.publicTips || [];
+    let html = `<div class="flex-between"><h3>🌍 Vidokezo vya Umma</h3><button class="secondary" onclick="showAddTipForm()">➕ Toa Shauri</button></div>
+                <div id="addTipForm" style="display:none; background:var(--surface); padding:1rem; border-radius:20px; margin:10px 0;">
+                  <input type="text" id="tipMatch" placeholder="Mechi"><input type="text" id="tipPrediction" placeholder="Utabiri"><input type="text" id="tipOdds" placeholder="Odds"><textarea id="tipReason" rows="2" placeholder="Sababu"></textarea>
                   <div class="flex-between"><button onclick="addPublicTip()">Chapisha</button><button class="secondary" onclick="closeTipForm()">Funga</button></div>
                 </div>
                 <div id="tipsList">`;
-    if(publicTips.length===0) html += `<div class="card">Hakuna vidokezo. Kuwa wa kwanza!</div>`;
+    if (tips.length === 0) html += `<div class="card">Hakuna vidokezo. Kuwa wa kwanza!</div>`;
     else {
-      [...publicTips].reverse().forEach((tip,i) => {
+      [...tips].reverse().forEach((tip, idx) => {
         html += `<div class="card">
-          <div class="flex-between"><strong>⚽ ${tip.match}</strong><span class="text-accent">${tip.prediction}</span></div>
-          <div>📊 Odds: ${tip.odds||'N/A'} | 🕒 ${new Date(tip.date).toLocaleString()}</div>
-          <div class="text-muted">💡 ${tip.reason||'Hakuna maelezo'}</div>
-          <div class="flex-between"><small>🧑‍💻 ${tip.author||'Anonymous'}</small><button class="secondary" onclick="likeTip(${publicTips.length-1-i})">❤️ ${tip.likes||0}</button></div>
+          <div class="flex-between"><strong>⚽ ${tip.match}</strong><span>${tip.prediction}</span></div>
+          <div>📊 Odds: ${tip.odds || '-'} | 🕒 ${new Date(tip.date).toLocaleString()}</div>
+          <div>💡 ${tip.reason || 'Hakuna maelezo'}</div>
+          <div class="flex-between"><small>🧑‍💻 ${tip.author || 'NJEM User'}</small><button class="secondary" onclick="likeTip(${tips.length-1-idx})">❤️ ${tip.likes || 0}</button></div>
         </div>`;
       });
     }
     html += `</div>`;
-    container.innerHTML = html;
+    document.getElementById('mainContent').innerHTML = html;
   }
-  window.showAddTipForm = () => { document.getElementById('addTipForm').style.display='block'; };
-  window.closeTipForm = () => { document.getElementById('addTipForm').style.display='none'; };
+  window.showAddTipForm = () => { document.getElementById('addTipForm').style.display = 'block'; };
+  window.closeTipForm = () => { document.getElementById('addTipForm').style.display = 'none'; };
   window.addPublicTip = () => {
-    const match = document.getElementById('tipMatch').value.trim();
-    const pred = document.getElementById('tipPrediction').value.trim();
-    if(!match||!pred) { toast("Jaza mechi na utabiri",true); return; }
-    publicTips.push({
+    let match = document.getElementById('tipMatch').value.trim();
+    let pred = document.getElementById('tipPrediction').value.trim();
+    if (!match || !pred) { addToast("Jaza mechi na utabiri", true); return; }
+    userData.publicTips = userData.publicTips || [];
+    userData.publicTips.push({
       match, prediction: pred, odds: document.getElementById('tipOdds').value.trim() || '-',
       reason: document.getElementById('tipReason').value.trim(), date: new Date().toISOString(),
-      author: "NJEM User", likes: 0
+      author: currentUserPIN === '1234' ? 'Mzee NJEM' : 'Mtumiaji', likes: 0
     });
-    savePublicTips();
+    saveUserData();
     closeTipForm();
     document.getElementById('tipMatch').value = '';
     document.getElementById('tipPrediction').value = '';
-    document.getElementById('tipReason').value = '';
-    toast("Shauri limechapishwa!");
+    addToast("Shauri limechapishwa!");
     renderPublic();
   };
   window.likeTip = (idx) => {
-    publicTips[idx].likes = (publicTips[idx].likes||0)+1;
-    savePublicTips();
+    userData.publicTips[idx].likes = (userData.publicTips[idx].likes || 0) + 1;
+    saveUserData();
     renderPublic();
   };
 
-  // Navigation
-  window.switchTab = (tab) => {
-    currentTab = tab;
-    document.querySelectorAll('.nav-label').forEach(l=>l.classList.remove('active'));
-    document.getElementById(`nav-${tab}`).classList.add('active');
-    if(tab==='home') renderHome();
-    else if(tab==='fixtures') renderFixtures();
-    else if(tab==='mikeka') renderMikeka();
-    else if(tab==='public') renderPublic();
+  // refresh mock data
+  window.refreshData = () => {
+    generateMockData();
+    if (currentTab === 'home') renderHome();
+    else if (currentTab === 'fixtures') renderFixtures();
+    addToast("Data imeburudika");
   };
 
-  // INIT
-  async function init() {
-    loadLocalData();
-    await fetchLiveAndFixtures();  // mock data
-    document.getElementById('loading-screen').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-    switchTab('home');
-    setInterval(() => { fetchLiveAndFixtures(); }, 30000);
+  // Tab navigation
+  let currentTab = 'home';
+  function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      if (btn.getAttribute('data-tab') === tab) btn.classList.add('active');
+      else btn.classList.remove('active');
+    });
+    if (tab === 'home') renderHome();
+    else if (tab === 'fixtures') renderFixtures();
+    else if (tab === 'mikeka') renderMikeka();
+    else if (tab === 'public') renderPublic();
   }
-  window.onload = init;
+
+  // Logout
+  window.logout = () => {
+    currentUserPIN = null;
+    document.getElementById('appScreen').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'block';
+    document.getElementById('pinInput').value = '';
+  };
+
+  // Login logic
+  document.getElementById('loginBtn').addEventListener('click', () => {
+    let pin = document.getElementById('pinInput').value.trim();
+    if (pin === "") {
+      document.getElementById('loginError').innerText = "Tafadhali ingiza PIN";
+      return;
+    }
+    loadUserData(pin);
+    generateMockData(); // load mock live scores
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appScreen').style.display = 'block';
+    switchTab('home');
+    // attach nav listeners
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => switchTab(btn.getAttribute('data-tab')));
+    });
+    addToast(`Karibu ${pin === '1234' ? 'Mzee NJEM' : 'mchapishaji'}`);
+  });
+
+  // Allow enter key
+  document.getElementById('pinInput').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') document.getElementById('loginBtn').click();
+  });
 </script>
 </body>
 </html>
