@@ -1744,7 +1744,7 @@ const genOTP=()=>Math.floor(100000+Math.random()*900000).toString();
 const el=(id)=>document.getElementById(id);
 const lgName=(id)=>LEAGUES.find(l=>l.id===id)?.name||id;
 const lgFlag=(id)=>LEAGUES.find(l=>l.id===id)?.flag||'🌐';
-const sc=(s)=>s==='WON'?'var(--win)':s==='LOST'?'var(--loss)':s==='PENDING'?'var(--warn)':'#888';
+const sc=(s)=>s==='WON'?'var(--win)':s==='LOST'?'var(--loss)':s==='PENDING'?'var(--warn)':s==='CASHOUT'?'var(--info)':s==='VOID'?'#888':'#888';
 let currentUser=null,mikeka=[],allMikeka=[],realtimeChannel=null,currentTab='home';
 
 // TOAST
@@ -2729,7 +2729,7 @@ function renderMikeka(c){
     </div>
     <input class="inp" id="mk-q" placeholder="🔍 Tafuta mkeka au timu..." value="${mkQ}" style="margin-bottom:.75rem"/>
     <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:.75rem">
-      ${['ALL','PENDING','WON','LOST','VOID'].map(f=>`<button class="btn-outline ${mkF===f?'active':''}" onclick="window._mkF('${f}')" style="${mkF===f?`border-color:${sc(f)};background:${sc(f)}22;color:${sc(f)}`:''}">
+      ${['ALL','PENDING','WON','LOST','CASHOUT','VOID'].map(f=>`<button class="btn-outline ${mkF===f?'active':''}" onclick="window._mkF('${f}')" style="${mkF===f?`border-color:${sc(f)};background:${sc(f)}22;color:${sc(f)}`:''}">
         ${f} <span style="opacity:.6">${source.filter(m=>f==='ALL'||m.status===f).length}</span></button>`).join('')}
     </div>
     ${shown.length===0?'<div class="empty"><div style="font-size:44px">📋</div><div style="margin-top:8px">Hakuna mikeka</div></div>':shown.map(m=>mkCard(m,false)).join('')}`;
@@ -2745,13 +2745,20 @@ function mkCard(m,mini){
   const matches=m.matches||[];
   const posterName=m.users?.name||(m.user_id===currentUser.id?currentUser.name:null);
   const isOwn=m.user_id===currentUser.id;
+  const isOwner=currentUser.role==='owner';
+  const isAnalyst=currentUser.role==='analyst'||isOwner;
+  const canEdit=isOwn&&isAnalyst&&m.status==='PENDING';
+  const canCashout=isOwn&&isAnalyst&&m.status==='PENDING';
+  const isCashout=m.status==='CASHOUT';
+  const statusEmoji=m.status==='WON'?'🟢':m.status==='LOST'?'🔴':m.status==='CASHOUT'?'💵':m.status==='VOID'?'⚪':'🟡';
   return`<div style="background:var(--surface);border:1px solid ${isOwn?'rgba(0,255,133,.25)':'var(--border)'};border-radius:16px;margin-bottom:.6rem;overflow:hidden">
     <div data-exp="${m.id}" style="padding:.85rem;cursor:${mini?'default':'pointer'};display:flex;justify-content:space-between;align-items:center">
       <div style="flex:1">
-        <div style="font-weight:600;font-size:13px">${m.name||'Mkeka #'+m.id.slice(-4)}</div>
+        <div style="font-weight:600;font-size:13px">${statusEmoji} ${m.name||'Mkeka #'+m.id.slice(-4)}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">
           ${posterName?`👤 <span style="color:${isOwn?'var(--accent)':'var(--muted)'};">${posterName}</span> · `:''}${m.date} · ${matches.length} mechi · TZS ${fmt(m.stake)}
         </div>
+        ${isCashout&&m.cashout_amount?`<div style="font-size:11px;color:var(--info);margin-top:2px;font-weight:600">💵 Cashout: TZS ${fmt(m.cashout_amount)}</div>`:''}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
         <div style="background:${sc(m.status)}22;color:${sc(m.status)};padding:.15rem .55rem;border-radius:20px;font-size:10px;font-weight:700">${m.status}</div>
@@ -2761,15 +2768,209 @@ function mkCard(m,mini){
     ${!mini?`<div id="det-${m.id}" style="display:none;border-top:1px solid var(--border);padding:.75rem">
       ${matches.map((match,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:.45rem 0;${i<matches.length-1?'border-bottom:1px solid #0d1f14':''}">
         <div><div style="font-size:12px;font-weight:600">${lgFlag(match.league)} ${match.teams}</div><div style="font-size:10px;color:var(--muted)">${lgName(match.league)} · ${match.market} · ${match.pick}</div></div>
-        <div style="text-align:right"><div style="font-size:12px">${match.odds}x</div><div data-teams="${match.teams}" style="font-size:10px;font-weight:700;color:${sc(match.outcome)};background:${sc(match.outcome)}22;padding:.1rem .4rem;border-radius:6px">${match.outcome||'PENDING'}</div></div>
+        <div style="text-align:right"><div style="font-size:12px">${match.odds}x</div><div style="font-size:10px;font-weight:700;color:${sc(match.outcome)};background:${sc(match.outcome)}22;padding:.1rem .4rem;border-radius:6px">${match.outcome||'PENDING'}</div></div>
       </div>`).join('')}
-      <div style="margin-top:.75rem;padding:.6rem;background:rgba(0,0,0,.3);border-radius:10px;display:flex;justify-content:space-between;font-size:13px">
-        <span style="color:var(--muted)">Potential Return:</span><span style="color:var(--accent);font-weight:700">TZS ${fmt(m.potential_return||0)}</span>
+      <div style="margin-top:.75rem;padding:.6rem;background:rgba(0,0,0,.3);border-radius:10px">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:${isCashout?'6px':'0'}">
+          <span style="color:var(--muted)">Potential Return:</span><span style="color:var(--accent);font-weight:700">TZS ${fmt(m.potential_return||0)}</span>
+        </div>
+        ${isCashout&&m.cashout_amount?`
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+          <span style="color:var(--muted)">Cashout Iliyopokelewa:</span><span style="color:var(--info);font-weight:700">TZS ${fmt(m.cashout_amount)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px">
+          <span style="color:var(--muted)">Faida/Hasara vs Stake:</span>
+          <span style="color:${m.cashout_amount>=m.stake?'var(--win)':'var(--loss)'};font-weight:700">${m.cashout_amount>=m.stake?'+':''}TZS ${fmt(m.cashout_amount-(m.stake||0))}</span>
+        </div>`:''}
       </div>
       ${m.analysis?`<div style="margin-top:8px;font-size:11px;color:var(--muted);font-style:italic">📝 ${m.analysis}</div>`:''}
+      ${canEdit||canCashout?`
+      <div style="display:flex;gap:8px;margin-top:12px">
+        ${canEdit?`<button onclick="window._editMkeka('${m.id}')" style="flex:1;padding:.5rem;border-radius:10px;border:1px solid var(--accent);background:rgba(0,255,133,.08);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer">✏️ Edit</button>`:''}
+        ${canCashout?`<button onclick="window._cashoutMkeka('${m.id}',${m.stake||0},${m.potential_return||0})" style="flex:1;padding:.5rem;border-radius:10px;border:1px solid var(--info);background:rgba(77,166,255,.08);color:var(--info);font-size:12px;font-weight:600;cursor:pointer">💵 Cashout</button>`:''}
+      </div>`:''}
     </div>`:''}
   </div>`;
 }
+
+// ═══════════════════════════════════════
+// EDIT MKEKA MODAL
+// ═══════════════════════════════════════
+window._editMkeka = async (mkId) => {
+  const mk = mikeka.find(m => m.id === mkId);
+  if (!mk) return toast('Mkeka haipatikani', 'err');
+  const matches = mk.matches || [];
+  const allRegions = [...new Set(LEAGUES.map(l => l.region))];
+
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.id = 'edit-modal';
+
+  const matchesHtml = matches.map((match, i) => `
+    <div style="background:rgba(0,0,0,.25);border-radius:10px;padding:.75rem;margin-bottom:8px">
+      <div style="font-size:10px;font-weight:700;color:var(--accent);margin-bottom:6px">Mechi ${i+1}</div>
+      <input class="inp-sm" id="edit-teams-${match.id}" value="${match.teams||''}" placeholder="Timu A vs Timu B" style="margin-bottom:6px"/>
+      <div class="grid-2" style="margin-bottom:6px">
+        <select class="inp-sm" id="edit-league-${match.id}">
+          ${allRegions.map(r=>`<optgroup label="${r}">${LEAGUES.filter(l=>l.region===r).map(l=>`<option value="${l.id}" ${match.league===l.id?'selected':''}>${l.flag} ${l.name}</option>`).join('')}</optgroup>`).join('')}
+        </select>
+        <select class="inp-sm" id="edit-market-${match.id}">
+          ${MARKETS.map(mk=>`<option value="${mk}" ${match.market===mk?'selected':''}>${mk}</option>`).join('')}
+        </select>
+      </div>
+      <div class="grid-2">
+        <input class="inp-sm" id="edit-pick-${match.id}" value="${match.pick||''}" placeholder="Pick (1X, Over 2.5...)"/>
+        <input class="inp-sm" id="edit-odds-${match.id}" value="${match.odds||''}" type="number" step="0.01" min="1" placeholder="Odds"/>
+      </div>
+    </div>`).join('');
+
+  ov.innerHTML = `
+    <div class="modal-box" style="max-height:90vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+        <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800">✏️ Edit Mkeka</div>
+        <button onclick="document.getElementById('edit-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">×</button>
+      </div>
+      <div style="margin-bottom:10px">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Jina la Mkeka</div>
+        <input class="inp" id="edit-name" value="${mk.name||''}" placeholder="Jina la mkeka"/>
+      </div>
+      <div class="grid-2" style="margin-bottom:10px">
+        <div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Tarehe</div>
+          <input type="date" class="inp-sm" id="edit-date" value="${mk.date||today()}"/>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Stake (TZS)</div>
+          <input type="number" class="inp-sm" id="edit-stake" value="${mk.stake||5000}"/>
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px">Mechi (${matches.length})</div>
+      ${matchesHtml}
+      <div style="margin-bottom:10px">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Analysis</div>
+        <textarea class="inp-sm" id="edit-ana" rows="2" placeholder="Analysis yako...">${mk.analysis||''}</textarea>
+      </div>
+      <button id="edit-save-btn" style="width:100%;padding:.9rem;border-radius:14px;border:none;background:var(--accent);color:#000;font-weight:700;font-size:15px;cursor:pointer">💾 Hifadhi Mabadiliko</button>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.onclick = (e) => { if(e.target===ov) ov.remove(); };
+
+  document.getElementById('edit-save-btn').onclick = async () => {
+    const btn = document.getElementById('edit-save-btn');
+    btn.textContent = 'Inasave...'; btn.disabled = true;
+
+    const newName = document.getElementById('edit-name')?.value || mk.name;
+    const newDate = document.getElementById('edit-date')?.value || mk.date;
+    const newStake = parseInt(document.getElementById('edit-stake')?.value || mk.stake);
+
+    // Update each match
+    for (const match of matches) {
+      const newTeams  = document.getElementById(`edit-teams-${match.id}`)?.value || match.teams;
+      const newLeague = document.getElementById(`edit-league-${match.id}`)?.value || match.league;
+      const newMarket = document.getElementById(`edit-market-${match.id}`)?.value || match.market;
+      const newPick   = document.getElementById(`edit-pick-${match.id}`)?.value || match.pick;
+      const newOdds   = parseFloat(document.getElementById(`edit-odds-${match.id}`)?.value || match.odds);
+      await sb.from('matches').update({teams:newTeams,league:newLeague,market:newMarket,pick:newPick,odds:newOdds}).eq('id',match.id);
+    }
+
+    // Recalculate odds & potential return
+    const newOddsArr = matches.map(match => parseFloat(document.getElementById(`edit-odds-${match.id}`)?.value || match.odds));
+    const newTotalOdds = newOddsArr.reduce((p,o)=>p*(o||1),1);
+    const newPotRet = Math.round(newTotalOdds * newStake);
+    const newAna = document.getElementById('edit-ana')?.value || '';
+
+    const {error} = await sb.from('mikeka').update({
+      name: newName, date: newDate, stake: newStake,
+      total_odds: newTotalOdds, potential_return: newPotRet, analysis: newAna
+    }).eq('id', mkId);
+
+    btn.textContent = '💾 Hifadhi Mabadiliko'; btn.disabled = false;
+    if (error) return toast('Hitilafu: ' + error.message, 'err');
+    toast('✅ Mkeka umesasishwa!');
+    ov.remove();
+    await loadData();
+    showTab('mikeka');
+  };
+};
+
+// ═══════════════════════════════════════
+// CASHOUT MODAL
+// ═══════════════════════════════════════
+window._cashoutMkeka = (mkId, stake, potReturn) => {
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.id = 'cashout-modal';
+
+  const suggested = Math.round(potReturn * 0.65); // suggest 65% of pot return
+
+  ov.innerHTML = `
+    <div class="modal-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+        <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800">💵 Cashout</div>
+        <button onclick="document.getElementById('cashout-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">×</button>
+      </div>
+      <div style="background:rgba(77,166,255,.08);border:1px solid rgba(77,166,255,.25);border-radius:12px;padding:.85rem;margin-bottom:1rem">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+          <span style="color:var(--muted)">Stake yako:</span>
+          <span style="font-weight:700">TZS ${fmt(stake)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+          <span style="color:var(--muted)">Potential Return:</span>
+          <span style="font-weight:700;color:var(--accent)">TZS ${fmt(potReturn)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px">
+          <span style="color:var(--muted)">Suggested cashout (~65%):</span>
+          <span style="font-weight:700;color:var(--info)">TZS ${fmt(suggested)}</span>
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px">Kiasi ulichopokea kwa cashout (TZS):</div>
+      <input class="inp" id="cashout-amount" type="number" min="1" placeholder="Ingiza kiasi halisi (mfano: ${fmt(suggested)})" style="margin-bottom:12px"/>
+      <div id="cashout-preview" style="display:none;padding:.6rem;background:rgba(0,0,0,.3);border-radius:10px;margin-bottom:12px;font-size:12px"></div>
+      <button id="cashout-confirm-btn" style="width:100%;padding:.9rem;border-radius:14px;border:none;background:var(--info);color:#fff;font-weight:700;font-size:15px;cursor:pointer">✅ Thibitisha Cashout</button>
+      <div style="margin-top:8px;font-size:11px;color:var(--muted);text-align:center">Cashout itabadilisha hali ya mkeka na itaongezwa kwenye bankroll yako</div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.onclick = (e) => { if(e.target===ov) ov.remove(); };
+
+  const amtInp = document.getElementById('cashout-amount');
+  const preview = document.getElementById('cashout-preview');
+  amtInp.oninput = () => {
+    const amt = parseInt(amtInp.value) || 0;
+    if (!amt) { preview.style.display='none'; return; }
+    const profit = amt - stake;
+    preview.style.display = 'block';
+    preview.innerHTML = `
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--muted)">Cashout:</span><span style="color:var(--info);font-weight:700">TZS ${fmt(amt)}</span></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Faida/Hasara:</span><span style="color:${profit>=0?'var(--win)':'var(--loss)'};font-weight:700">${profit>=0?'+':''}TZS ${fmt(profit)}</span></div>`;
+  };
+
+  document.getElementById('cashout-confirm-btn').onclick = async () => {
+    const amt = parseInt(amtInp.value);
+    if (!amt || amt < 1) return toast('Ingiza kiasi sahihi!', 'err');
+    const btn = document.getElementById('cashout-confirm-btn');
+    btn.textContent = 'Inasave...'; btn.disabled = true;
+
+    const { error } = await sb.from('mikeka').update({
+      status: 'CASHOUT',
+      cashout_amount: amt
+    }).eq('id', mkId);
+
+    if (error) {
+      btn.textContent = '✅ Thibitisha Cashout'; btn.disabled = false;
+      return toast('Hitilafu: ' + error.message, 'err');
+    }
+
+    // Update bankroll: refund stake + cashout profit
+    const gain = amt - stake; // could be negative if cashed out less than stake
+    const newBankroll = currentUser.bankroll + amt; // add full cashout amount back
+    await updateUser({ bankroll: newBankroll });
+
+    toast(`💵 Cashout ya TZS ${fmt(amt)} imesajiliwa!`, 'ok');
+    ov.remove();
+    await loadData();
+    showTab('mikeka');
+  };
+};
 
 // POST
 let pMatches=[],pChecks=[false,false,false,false],kOn=false,kProb=55;
@@ -3031,7 +3232,7 @@ function renderReports(c){
     userMap[uid].staked+=(m.stake||0);
   });
 
-  const viewTabs=[['overview','Mimi'],['leagues','Ligi'],['markets','Markets'],['trend','Trend'],['ai','AI Tips'],...(isOwner?[['group','Kikundi']]:[])];
+  const viewTabs=[['overview','Mimi'],['assets','Assets'],['leagues','Ligi'],['markets','Markets'],['trend','Trend'],['ai','AI Tips'],...(isOwner?[['group','Kikundi']]:[])];
 
   c.innerHTML=`
     <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:.9rem">📊 Ripoti Zangu</div>
@@ -3061,6 +3262,91 @@ function renderReports(c){
         </div>
       </div>
       ${mikeka.length===0?`<div class="card" style="margin-top:.75rem;border-color:rgba(255,170,0,.3)"><div style="font-size:12px;color:var(--warn);font-weight:700;margin-bottom:4px">📊 Stats Zitaonekana Hapa</div><div style="font-size:11px;color:var(--muted)">Unapoweka mikeka, uchambuzi wako wa kibinafsi utaonekana hapa — win rate, ROI, leagues bora, na zaidi.</div></div>`:''}`;
+  }
+  if(rV==='assets'){
+    // Assets: cashout + won breakdown + bankroll status
+    const cashouts=fil.filter(m=>m.status==='CASHOUT');
+    const totalStaked=fil.reduce((s,m)=>s+(m.stake||0),0);
+    const totalWon=won.reduce((s,m)=>s+(m.potential_return||0),0);
+    const totalCashout=cashouts.reduce((s,m)=>s+(m.cashout_amount||0),0);
+    const totalReceived=totalWon+totalCashout;
+    const totalLost=fil.filter(m=>m.status==='LOST').reduce((s,m)=>s+(m.stake||0),0);
+    const netPL=totalReceived-totalStaked;
+    const pending=fil.filter(m=>m.status==='PENDING');
+    const pendingExposure=pending.reduce((s,m)=>s+(m.stake||0),0);
+    const pendingPotential=pending.reduce((s,m)=>s+(m.potential_return||0),0);
+
+    rc.innerHTML=`
+      <!-- Bankroll card -->
+      <div style="background:linear-gradient(135deg,#0f3520,#092518);border:1px solid rgba(0,255,133,.25);border-radius:16px;padding:1.1rem;margin-bottom:.75rem">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">💰 Bankroll Ya Sasa</div>
+        <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:var(--accent)">TZS ${fmt(currentUser.bankroll)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Pending exposure: <span style="color:var(--warn)">TZS ${fmt(pendingExposure)}</span> · Potential win: <span style="color:var(--win)">TZS ${fmt(pendingPotential)}</span></div>
+      </div>
+
+      <!-- Flow summary -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.75rem">
+        <div class="stat-box"><div class="stat-icon">📤</div><div class="stat-val" style="color:var(--text)">TZS ${fmt(totalStaked)}</div><div class="stat-label">Kilichowekwa</div></div>
+        <div class="stat-box"><div class="stat-icon">🏆</div><div class="stat-val" style="color:var(--win)">TZS ${fmt(totalWon)}</div><div class="stat-label">Won Returns</div></div>
+        <div class="stat-box"><div class="stat-icon">💵</div><div class="stat-val" style="color:var(--info)">TZS ${fmt(totalCashout)}</div><div class="stat-label">Cashout Total</div></div>
+        <div class="stat-box"><div class="stat-icon">${netPL>=0?'📈':'📉'}</div><div class="stat-val" style="color:${netPL>=0?'var(--win)':'var(--loss)'}">${netPL>=0?'+':''}${fmt(netPL)}</div><div class="stat-label">Net P/L</div></div>
+      </div>
+
+      <!-- Income sources breakdown -->
+      <div class="card" style="margin-bottom:.75rem">
+        <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:10px">📊 Vyanzo vya Mapato</div>
+        ${totalReceived===0?`<div style="text-align:center;color:var(--muted);font-size:12px;padding:.5rem">Bado hakuna mapato kwenye kipindi hiki</div>`:`
+        <div style="margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span>🏆 Won Bets (${won.length})</span>
+            <span style="color:var(--win);font-weight:700">TZS ${fmt(totalWon)}</span>
+          </div>
+          ${totalReceived>0?`<div style="background:rgba(0,0,0,.4);border-radius:6px;height:8px;overflow:hidden"><div style="height:100%;width:${((totalWon/totalReceived)*100).toFixed(0)}%;background:var(--win);border-radius:6px"></div></div>`:''}
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span>💵 Cashouts (${cashouts.length})</span>
+            <span style="color:var(--info);font-weight:700">TZS ${fmt(totalCashout)}</span>
+          </div>
+          ${totalReceived>0?`<div style="background:rgba(0,0,0,.4);border-radius:6px;height:8px;overflow:hidden"><div style="height:100%;width:${((totalCashout/totalReceived)*100).toFixed(0)}%;background:var(--info);border-radius:6px"></div></div>`:''}
+        </div>`}
+      </div>
+
+      <!-- Cashout history -->
+      ${cashouts.length>0?`
+      <div class="card" style="margin-bottom:.75rem">
+        <div style="font-size:12px;font-weight:700;color:var(--info);margin-bottom:10px">💵 Historia ya Cashouts</div>
+        ${cashouts.map(m=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid #0d1f14">
+            <div>
+              <div style="font-size:12px;font-weight:600">${m.name||'Mkeka'}</div>
+              <div style="font-size:10px;color:var(--muted)">${m.date} · Stake: TZS ${fmt(m.stake)}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:13px;font-weight:700;color:var(--info)">TZS ${fmt(m.cashout_amount||0)}</div>
+              <div style="font-size:10px;color:${(m.cashout_amount||0)>=m.stake?'var(--win)':'var(--loss)'}">${(m.cashout_amount||0)>=m.stake?'+':''}TZS ${fmt((m.cashout_amount||0)-m.stake)}</div>
+            </div>
+          </div>`).join('')}
+      </div>`:''}
+
+      <!-- Won history -->
+      ${won.length>0?`
+      <div class="card">
+        <div style="font-size:12px;font-weight:700;color:var(--win);margin-bottom:10px">🏆 Won Bets (${won.length})</div>
+        ${won.slice(0,5).map(m=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid #0d1f14">
+            <div>
+              <div style="font-size:12px;font-weight:600">${m.name||'Mkeka'}</div>
+              <div style="font-size:10px;color:var(--muted)">${m.date} · ${(m.total_odds||1).toFixed(2)}x</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:13px;font-weight:700;color:var(--win)">TZS ${fmt(m.potential_return||0)}</div>
+              <div style="font-size:10px;color:var(--win)">+TZS ${fmt((m.potential_return||0)-m.stake)}</div>
+            </div>
+          </div>`).join('')}
+        ${won.length>5?`<div style="text-align:center;font-size:11px;color:var(--muted);margin-top:8px">+${won.length-5} zaidi</div>`:''}
+      </div>`:''}
+    `;
   }
   if(rV==='leagues'){
     rc.innerHTML=`
