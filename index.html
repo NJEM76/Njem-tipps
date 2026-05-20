@@ -132,6 +132,8 @@ const APIFOOTBALL_LEAGUE_IDS = {
   'ghana':         363,   // Ghana Premier League
   'ethiopia':      372,   // Ethiopian Premier League
   'morocco':       200,   // Botola Pro Morocco
+  'algeria':       197,   // Ligue Pro Algeria (API-Football ID 197)
+  'tunisia':       202,   // Ligue Pro Tunisia
   'senegal':       597,   // Ligue 1 Senegal
   'cote':          193,   // Ligue 1 Côte d'Ivoire
   'cameroon':      370,   // Elite One Cameroon
@@ -1643,6 +1645,8 @@ const LEAGUES=[
   {id:'rwanda',name:'Rwanda National League',flag:'🇷🇼',region:'Afrika'},
   {id:'zambia',name:'Zambia Super League',flag:'🇿🇲',region:'Afrika'},
   {id:'morocco',name:'Botola Pro Morocco',flag:'🇲🇦',region:'Afrika'},
+  {id:'algeria',name:'Ligue Pro Algeria',flag:'🇩🇿',region:'Afrika'},
+  {id:'tunisia',name:'Ligue Pro Tunisia',flag:'🇹🇳',region:'Afrika'},
   {id:'ethiopia',name:'Ethiopian Premier League',flag:'🇪🇹',region:'Afrika'},
   {id:'senegal',name:'Ligue 1 Senegal',flag:'🇸🇳',region:'Afrika'},
   {id:'cote',name:"Ligue 1 Côte d'Ivoire",flag:'🇨🇮',region:'Afrika'},
@@ -2180,7 +2184,10 @@ function renderLiveSection() {
   sec.innerHTML = `
     <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:8px;display:flex;align-items:center;gap:6px">
       ${sectionTitle}
-      <span style="margin-left:auto;font-size:10px;color:var(--muted);font-weight:400">🔄 ${freshLabel}</span>
+      <span style="margin-left:auto;display:flex;align-items:center;gap:6px">
+        <button onclick="window._refreshLive()" style="padding:.2rem .55rem;border-radius:8px;border:1px solid var(--border);background:rgba(0,255,133,.08);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer">🔄 Refresh</button>
+        <span style="font-size:10px;color:var(--muted);font-weight:400">${freshLabel}</span>
+      </span>
     </div>
     ${liveOnly.length===0&&upcoming.length===0?'':'<div style="font-size:10px;color:var(--muted);margin-bottom:8px;padding:.4rem .6rem;background:rgba(0,0,0,.25);border-radius:8px">📡 Data: TheSportsDB — score inaweza kuchelewa hadi dakika 3-5. Bonyeza mechi kwa details zaidi.</div>'}
     <div style="display:flex;flex-direction:column;gap:6px">
@@ -2251,6 +2258,8 @@ const SPORTSDB_LEAGUES = [
   {id:'rwanda',    sportsdbId:'4397', name:'Rwanda National League',     flag:'🇷🇼', region:'Afrika'},
   {id:'zambia',    sportsdbId:'4398', name:'Zambia Super League',        flag:'🇿🇲', region:'Afrika'},
   {id:'morocco',   sportsdbId:'4399', name:'Botola Pro Morocco',         flag:'🇲🇦', region:'Afrika'},
+  {id:'algeria',   sportsdbId:'4371', name:'Ligue Pro Algeria',          flag:'🇩🇿', region:'Afrika'},
+  {id:'tunisia',   sportsdbId:'4379', name:'Ligue Pro Tunisia',          flag:'🇹🇳', region:'Afrika'},
   {id:'ethiopia',  sportsdbId:'4400', name:'Ethiopian Premier League',   flag:'🇪🇹', region:'Afrika'},
   {id:'senegal',   sportsdbId:'4401', name:'Ligue 1 Senegal',            flag:'🇸🇳', region:'Afrika'},
   {id:'cote',      sportsdbId:'4402', name:'Ligue 1 Côte d\'Ivoire',     flag:'🇨🇮', region:'Afrika'},
@@ -2349,7 +2358,10 @@ function renderFixtures(c) {
   const regions = [...new Set(SPORTSDB_LEAGUES.map(l => l.region))];
 
   c.innerHTML = `
-    <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:.75rem">📅 Fixtures</div>
+    <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:.75rem;display:flex;align-items:center;justify-content:space-between">
+      📅 Fixtures
+      <button onclick="window._fixRefresh()" style="padding:.35rem .8rem;border-radius:20px;border:1px solid var(--border);background:rgba(0,255,133,.08);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">🔄 Refresh</button>
+    </div>
 
     <!-- Date selector — scrollable -->
     <div style="display:flex;gap:6px;margin-bottom:.75rem;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch">
@@ -2405,6 +2417,20 @@ function renderFixtures(c) {
     const cdi = el('fix-custom-date');
     if (cdi) cdi.value = date;
     if (fixSelectedLeague) loadFixMatchesFree(fixSelectedLeague);
+  };
+
+  window._fixRefresh = () => {
+    const btn = document.querySelector('button[onclick="window._fixRefresh()"]');
+    if (btn) { btn.textContent = '⏳ ...'; btn.disabled = true; }
+    if (fixSelectedLeague) {
+      loadFixMatchesFree(fixSelectedLeague).then(() => {
+        if (btn) { btn.textContent = '🔄 Refresh'; btn.disabled = false; }
+        toast('Fixtures zimesasishwa! ✅', 'ok');
+      });
+    } else {
+      if (btn) { btn.textContent = '🔄 Refresh'; btn.disabled = false; }
+      toast('Chagua ligi kwanza!', 'warn');
+    }
   };
 
   window._fixSearch = (q) => {
@@ -3291,6 +3317,14 @@ async function checkSavedSession() {
 // Global handlers
 window._showMatchDetails = (teams, eventId) => showMatchDetailsModal(teams, eventId);
 window._showFixtures = () => showFixtureBrowser();
+window._refreshLive = async () => {
+  const btn = document.querySelector('button[onclick="window._refreshLive()"]');
+  if (btn) { btn.textContent = '⏳ ...'; btn.disabled = true; }
+  await fetchLiveScores();
+  if (currentTab === 'home') renderLiveSection();
+  if (btn) { btn.textContent = '🔄 Refresh'; btn.disabled = false; }
+  toast('Imesasishwa! ✅', 'ok');
+};
 window._aiAnalysis = (teams, mid) => {
   readInps();
   const match = pMatches.find(m => m._id === mid);
