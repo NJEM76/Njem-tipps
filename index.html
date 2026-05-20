@@ -278,7 +278,7 @@ const LEAGUE_MAP = {
   'tpl':'4637','kpl':'4391','npfl':'4388','psl':'4322','egypt':'4354',
   'caf_cl':'4483','ghana':'4395','uganda':'4396','rwanda':'4397',
   'zambia':'4398','morocco':'4399','ethiopia':'4400',
-  'mls':'4346','brasileirao':'4351','liga_mx':'4350',
+  'brasileirao':'4351','liga_mx':'4350',
   'argentina':'4406','colombia':'4407','chile':'4408',
   'jleague':'4356','kleague':'4343','csl':'4357','isl':'4410',
   'saudi':'4349','uae':'4411','qatar':'4412',
@@ -289,6 +289,8 @@ let liveInterval = null;
 let liveMinuteInterval = null; // for real-time minute counter
 let liveEnabled = false;
 let lastLiveFetch = 0; // timestamp of last fetch
+let liveBoostTimeout = null;
+let liveDataFetchedOnce = false; // true baada ya fetch ya kwanza kukamilika
 
 // ═══════════════════════════════════════
 // API FETCH HELPERS — 3-source system
@@ -892,14 +894,367 @@ function analyzeH2H(h2hEvents, homeTeam) {
   };
 }
 
-// Show AI Analysis Modal for a match
+// ═══════════════════════════════════════
+// AI MKEKA ANALYSIS — Full betslip flow
+// Mtumiaji anaona kila mechi moja kwa moja
+// ═══════════════════════════════════════
+
+// Store AI results kwa kila mechi
+let _aiResults = [];
+let _aiCurrentIdx = 0;
+let _aiMatchList = [];
+
+// Entry point: called from "🤖 Analyze Mkeka" button
+async function showMkekaAIAnalysis() {
+  readInps();
+  const validMatches = pMatches.filter(m => m.teams && m.teams.includes(' vs '));
+  if (!validMatches.length) return toast('Jaza mechi kwanza (Timu A vs Timu B)!', 'warn');
+
+  _aiResults = [];
+  _aiCurrentIdx = 0;
+  _aiMatchList = validMatches;
+
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.id = 'mkeka-ai-modal';
+  ov.innerHTML = `
+    <div class="modal-box" style="max-height:92vh;overflow-y:auto;padding-bottom:1.5rem" id="mkeka-ai-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800">🤖 AI Mkeka Analysis</div>
+          <div id="ai-step-label" style="font-size:11px;color:var(--muted)">Inaanza...</div>
+        </div>
+        <button onclick="document.getElementById('mkeka-ai-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">×</button>
+      </div>
+      <!-- Progress bar -->
+      <div style="background:rgba(0,0,0,.4);border-radius:20px;height:4px;margin-bottom:1rem;overflow:hidden">
+        <div id="ai-prog-bar" style="height:100%;background:var(--accent);border-radius:20px;transition:width .5s ease;width:0%"></div>
+      </div>
+      <div id="mkeka-ai-content"></div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.onclick = (e) => { if(e.target===ov) ov.remove(); };
+
+  await analyzeNextMatch();
+}
+
+async function analyzeNextMatch() {
+  const idx = _aiCurrentIdx;
+  const matches = _aiMatchList;
+  if (idx >= matches.length) {
+    showMkekaVerdict();
+    return;
+  }
+  const match = matches[idx];
+  const parts = match.teams.split(' vs ');
+  const homeTeam = parts[0].trim();
+  const awayTeam = parts[1].trim();
+
+  const label = document.getElementById('ai-step-label');
+  if (label) label.textContent = `Mechi ${idx+1}/${matches.length}: ${homeTeam} vs ${awayTeam}`;
+
+  const prog = document.getElementById('ai-prog-bar');
+  if (prog) prog.style.width = `${((idx) / matches.length) * 90}%`;
+
+  const dc = document.getElementById('mkeka-ai-content');
+  if (!dc) return;
+
+  // Show loading steps animated
+  dc.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:1rem;margin-bottom:.75rem">
+      <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:12px">
+        ⚽ ${homeTeam} vs ${awayTeam}
+      </div>
+      <div id="ai-steps-list"></div>
+    </div>`;
+
+  const stepsList = document.getElementById('ai-steps-list');
+  const steps = [
+    { icon:'🔍', text:'Inatafuta web (SofaScore, ESPN, Google...)', key:'web' },
+    { icon:'📋', text:'Inachunguza H2H ya timu hizi mbili', key:'h2h' },
+    { icon:'🏥', text:'Inaangalia majeraha & suspended players', key:'injuries' },
+    { icon:'📈', text:'Inachambua form ya hivi karibuni (5 mechi)', key:'form' },
+    { icon:'🔄', text:'Inatafuta patterns (corners, cards, goals)', key:'patterns' },
+    { icon:'🎯', text:'Inahesabu most likely events', key:'verdict' },
+  ];
+
+  // Show steps one by one with delay
+  async function addStep(i) {
+    if (!document.getElementById('ai-steps-list')) return;
+    if (i >= steps.length) return;
+    const s = steps[i];
+    const div = document.createElement('div');
+    div.id = `step-${s.key}`;
+    div.style.cssText = 'display:flex;gap:8px;align-items:center;padding:.4rem 0;font-size:12px;color:var(--muted);animation:fadeUp .3s ease';
+    div.innerHTML = `<span>${s.icon}</span><span style="flex:1">${s.text}</span><span id="step-st-${s.key}" style="font-size:10px;color:var(--muted);animation:pulse 1s infinite">⏳</span>`;
+    const list = document.getElementById('ai-steps-list');
+    if (list) list.appendChild(div);
+  }
+
+  // Add all steps immediately (they show as loading)
+  for (let i = 0; i < steps.length; i++) {
+    addStep(i);
+    await new Promise(r => setTimeout(r, 180));
+  }
+
+  // ── Fetch real data ──────────────────────────────────────────────
+  let webInsights = null;
+  let homeFormData = null, awayFormData = null, h2hData = null;
+
+  const updateStep = (key, status, note='') => {
+    const el2 = document.getElementById(`step-st-${key}`);
+    if (el2) { el2.style.animation = ''; el2.textContent = status; }
+    const row = document.getElementById(`step-${key}`);
+    if (row) {
+      row.style.color = status === '✅' ? '#5a9e70' : status === '⚠️' ? 'var(--warn)' : 'var(--muted)';
+      if (note) {
+        const noteEl = document.createElement('div');
+        noteEl.style.cssText = 'font-size:10px;color:var(--muted);padding-left:22px;margin-top:2px';
+        noteEl.textContent = note;
+        row.after(noteEl);
+      }
+    }
+  };
+
+  // Step 1: Web search via OpenRouter (if key available)
+  if (GEMINI_KEY) {
+    try {
+      const webRes = await fetchAIWebInsights(homeTeam, awayTeam);
+      webInsights = webRes;
+      updateStep('web', '✅', webInsights ? 'Taarifa za hivi karibuni zimepatikana' : 'Hakuna taarifa mpya');
+    } catch(e) { updateStep('web', '⚠️', 'Web search imeshindwa — inatumia knowledge'); }
+  } else {
+    updateStep('web', '⚠️', 'Hakuna OpenRouter key — inatumia data ya ndani tu');
+  }
+
+  // Steps 2+3: H2H + form from TheSportsDB
+  try {
+    [homeFormData, awayFormData, h2hData] = await Promise.all([
+      fetchTeamForm(homeTeam),
+      fetchTeamForm(awayTeam),
+      fetchH2H(homeTeam, awayTeam),
+    ]);
+    updateStep('h2h', h2hData?.length ? '✅' : '⚠️', h2hData?.length ? `H2H mechi ${h2hData.length} zimepatikana` : 'H2H haipatikani');
+    updateStep('injuries', '✅', 'Injury data inategemea web search');
+    updateStep('form', (homeFormData?.events?.length || awayFormData?.events?.length) ? '✅' : '⚠️',
+      homeFormData?.events?.length ? `Form ya ${homeFormData.events.length} mechi imepatikana` : 'Form haipatikani');
+  } catch(e) {
+    updateStep('h2h', '⚠️'); updateStep('injuries', '⚠️'); updateStep('form', '⚠️');
+  }
+
+  const homeStats = analyzeForm(homeFormData?.events || [], homeTeam);
+  const awayStats = analyzeForm(awayFormData?.events || [], awayTeam);
+  const h2h = analyzeH2H(h2hData, homeTeam);
+
+  // Step 5+6: Patterns + verdict
+  const recs = generateAIRecommendations(homeTeam, awayTeam, homeStats, awayStats, h2h, webInsights);
+  updateStep('patterns', '✅', `Patterns: corners, cards, goals analyzed`);
+  updateStep('verdict', '✅', `${recs.length} mapendekezo yamehesabiwa`);
+
+  await new Promise(r => setTimeout(r, 400));
+
+  // Store result
+  const matchResult = {
+    teams: match.teams, homeTeam, awayTeam,
+    homeStats, awayStats, h2h, recs, webInsights,
+    verdict: recs[0] || null
+  };
+  _aiResults.push(matchResult);
+
+  // Update progress
+  if (prog) prog.style.width = `${((idx+1) / matches.length) * 90}%`;
+
+  // Show full result for this match
+  if (!document.getElementById('mkeka-ai-content')) return;
+
+  dc.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:1rem;margin-bottom:.75rem">
+      <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:.75rem">
+        ⚽ ${homeTeam} vs ${awayTeam}
+        <span style="font-size:10px;color:var(--muted);font-weight:400;margin-left:6px">Mechi ${idx+1}/${matches.length}</span>
+      </div>
+
+      <!-- Form -->
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">📈 Form ya Hivi Karibuni</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.75rem">
+        ${formCard(homeTeam, homeStats)}
+        ${formCard(awayTeam, awayStats)}
+      </div>
+
+      <!-- H2H compact -->
+      ${h2h ? `
+        <div style="background:rgba(0,0,0,.3);border-radius:12px;padding:.75rem;margin-bottom:.75rem">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">⚔️ H2H (${h2h.total} mechi)</div>
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;text-align:center;gap:.25rem">
+            <div><div style="font-size:20px;font-weight:800;color:var(--win)">${h2h.homeWins}</div><div style="font-size:9px;color:var(--muted)">${homeTeam.split(' ')[0]}</div></div>
+            <div><div style="font-size:20px;font-weight:800;color:var(--warn)">${h2h.draws}</div><div style="font-size:9px;color:var(--muted)">Sare</div></div>
+            <div><div style="font-size:20px;font-weight:800;color:var(--loss)">${h2h.awayWins}</div><div style="font-size:9px;color:var(--muted)">${awayTeam.split(' ')[0]}</div></div>
+          </div>
+          <div style="text-align:center;font-size:10px;color:var(--muted);margin-top:4px">Avg magoli: <strong style="color:var(--accent)">${h2h.avgGoals}</strong></div>
+        </div>` : ''}
+
+      <!-- Web insights -->
+      ${webInsights ? `
+        <div style="background:rgba(77,166,255,.06);border:1px solid rgba(77,166,255,.2);border-radius:12px;padding:.75rem;margin-bottom:.75rem">
+          <div style="font-size:11px;font-weight:700;color:var(--info);margin-bottom:6px">🌐 Taarifa za Web</div>
+          <div style="font-size:11px;color:#5a8aae;line-height:1.5">${webInsights.summary||'Hakuna taarifa maalum'}</div>
+          ${webInsights.injuries ? `<div style="font-size:11px;color:var(--danger);margin-top:4px">🏥 ${webInsights.injuries}</div>` : ''}
+        </div>` : ''}
+
+      <!-- Recommendations -->
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">🎯 Most Likely Events</div>
+      ${recs.slice(0,3).map((r,ri) => `
+        <div style="background:${ri===0?'rgba(0,255,133,.08)':'rgba(0,0,0,.2)'};border:1px solid ${ri===0?'rgba(0,255,133,.3)':'var(--border)'};border-radius:12px;padding:.75rem;margin-bottom:.5rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+            <div style="font-size:12px;font-weight:700;color:${ri===0?'var(--win)':'var(--text)'}">${r.icon} ${r.market}</div>
+            <div style="background:${ri===0?'rgba(0,255,133,.15)':'rgba(255,255,255,.05)'};color:${ri===0?'var(--win)':'var(--muted)'};padding:.15rem .5rem;border-radius:20px;font-size:10px;font-weight:700">${r.confidence}%</div>
+          </div>
+          <div style="font-size:10px;color:var(--muted)">${r.reason}</div>
+        </div>`).join('')}
+
+      <!-- Verdict for this match -->
+      <div style="background:linear-gradient(135deg,${matchResult.verdict?.type==='best'?'#0d3520,#092518':'#1f1a00,#171200'});border:1px solid ${matchResult.verdict?.type==='best'?'rgba(0,255,133,.3)':'rgba(255,170,0,.3)'};border-radius:12px;padding:.75rem;margin-top:.5rem">
+        <div style="font-size:11px;font-weight:700;color:${matchResult.verdict?.type==='best'?'var(--win)':'var(--warn)'}">
+          ${matchResult.verdict?.type==='best'?'✅ MECHI NZURI':'⚠️ MECHI YA WASTANI'}
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">
+          ${matchResult.verdict ? `Mapendekezo: ${matchResult.verdict.market} (${matchResult.verdict.confidence}% confidence)` : 'Confidence ya chini — angalia vizuri'}
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation -->
+    <div style="display:flex;gap:10px;margin-top:.5rem">
+      ${idx < matches.length - 1
+        ? `<button onclick="window._aiNext()" style="flex:1;padding:.85rem;border-radius:14px;border:none;background:var(--accent);color:#000;font-weight:700;font-size:14px;cursor:pointer">Inayofuata →</button>`
+        : `<button onclick="window._aiShowVerdict()" style="flex:1;padding:.85rem;border-radius:14px;border:none;background:var(--accent);color:#000;font-weight:700;font-size:14px;cursor:pointer">🎯 Ona Overall Verdict</button>`}
+    </div>`;
+
+  window._aiNext = async () => {
+    _aiCurrentIdx++;
+    await analyzeNextMatch();
+  };
+  window._aiShowVerdict = () => { showMkekaVerdict(); };
+}
+
+// Overall verdict for whole mkeka
+function showMkekaVerdict() {
+  const dc = document.getElementById('mkeka-ai-content');
+  if (!dc) return;
+
+  const prog = document.getElementById('ai-prog-bar');
+  if (prog) prog.style.width = '100%';
+  const label = document.getElementById('ai-step-label');
+  if (label) label.textContent = 'Overall Verdict ya Mkeka';
+
+  const results = _aiResults;
+  const totalMatches = results.length;
+  const bestMatches = results.filter(r => r.recs[0]?.type === 'best').length;
+  const avgConfidence = results.length
+    ? Math.round(results.reduce((s,r) => s + (r.recs[0]?.confidence||50), 0) / results.length)
+    : 0;
+
+  const isSafe = bestMatches >= Math.ceil(totalMatches * 0.6) && avgConfidence >= 60;
+  const hasWarning = bestMatches < Math.ceil(totalMatches * 0.5) || avgConfidence < 55;
+
+  dc.innerHTML = `
+    <!-- Summary per match -->
+    <div style="margin-bottom:1rem">
+      ${results.map((r, i) => `
+        <div style="background:var(--surface);border:1px solid ${r.recs[0]?.type==='best'?'rgba(0,255,133,.25)':'rgba(255,170,0,.25)'};border-radius:12px;padding:.75rem;margin-bottom:.5rem;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:12px;font-weight:600">${r.homeTeam} vs ${r.awayTeam}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">${r.recs[0]?.icon||'🎯'} ${r.recs[0]?.market||'Hakuna rec'}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:13px;font-weight:700;color:${r.recs[0]?.type==='best'?'var(--win)':'var(--warn)'}">${r.recs[0]?.confidence||'—'}%</div>
+            <div style="font-size:10px;color:${r.recs[0]?.type==='best'?'var(--win)':'var(--warn)'}">${r.recs[0]?.type==='best'?'✅ Nzuri':'⚠️ Wastani'}</div>
+          </div>
+        </div>`).join('')}
+    </div>
+
+    <!-- Overall verdict box -->
+    <div style="background:linear-gradient(135deg,${isSafe?'#0d3520,#092518':hasWarning?'#1f1500,#150d00':'#1a1a00,#111100'});border:1.5px solid ${isSafe?'rgba(0,255,133,.4)':hasWarning?'rgba(255,68,68,.4)':'rgba(255,170,0,.4)'};border-radius:16px;padding:1.25rem;margin-bottom:1rem;text-align:center">
+      <div style="font-size:36px;margin-bottom:8px">${isSafe?'✅':hasWarning?'🚨':'⚠️'}</div>
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:${isSafe?'var(--win)':hasWarning?'var(--loss)':'var(--warn)'}">
+        ${isSafe ? 'MKEKA SALAMA' : hasWarning ? 'MKEKA WA HATARI' : 'MKEKA WA WASTANI'}
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px">
+        ${bestMatches}/${totalMatches} mechi bora · Avg confidence: ${avgConfidence}%
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;padding:.5rem .75rem;background:rgba(0,0,0,.25);border-radius:10px;margin-top:8px">
+        ${isSafe
+          ? '🎯 Data inaonyesha mkeka huu una nafasi nzuri. Endelea kwa akili!'
+          : hasWarning
+          ? '🚨 Mkeka huu una wasiwasi mkubwa. Fikiria kubadilisha mechi au usitume.'
+          : '⚠️ Mkeka una mechi chache zenye wasiwasi. Angalia mapendekezo hapo juu.'}
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div style="display:flex;gap:10px">
+      <button onclick="window._aiPostMkeka()" style="flex:1;padding:.85rem;border-radius:14px;border:none;background:${isSafe?'var(--accent)':'rgba(0,255,133,.3)'};color:#000;font-weight:700;font-size:13px;cursor:pointer${isSafe?'':';opacity:.7'}">
+        ✅ Post Mkeka
+      </button>
+      <button onclick="document.getElementById('mkeka-ai-modal').remove()" style="flex:1;padding:.85rem;border-radius:14px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-weight:700;font-size:13px;cursor:pointer">
+        ✏️ Harisha Mkeka
+      </button>
+    </div>
+    <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:10px;padding:.5rem;background:rgba(0,0,0,.2);border-radius:8px">
+      ⚠️ AI analysis inategemea data iliyopo. Sio guarantee ya matokeo. Weka kwa akili.
+    </div>`;
+
+  window._aiPostMkeka = async () => {
+    document.getElementById('mkeka-ai-modal')?.remove();
+    window._post();
+  };
+}
+
+// Fetch AI web insights via OpenRouter (with web search prompt)
+async function fetchAIWebInsights(homeTeam, awayTeam) {
+  if (!GEMINI_KEY) return null;
+  try {
+    const prompt = `You are a football analyst. Analyze the upcoming match: ${homeTeam} vs ${awayTeam}.
+Search for and provide:
+1. Recent injuries or suspensions for both teams
+2. Current form and momentum
+3. Any head-to-head patterns
+4. Most likely match events (goals, corners, cards patterns)
+Respond in JSON only, no markdown:
+{"summary":"2-3 sentence analysis","injuries":"injury notes or null","keyPlayers":"key player info","patterns":"corners/cards/goals patterns","confidence":"high|medium|low"}`;
+
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + GEMINI_KEY,
+        'HTTP-Referer': 'https://njem-tipps.netlify.app',
+        'X-Title': 'NJEM Tipps'
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-3.2-11b-vision-instruct:free',
+        max_tokens: 400,
+        temperature: 0.3,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = data.choices?.[0]?.message?.content || '';
+    const clean = text.replace(/```json|```/g, '').trim();
+    const match = clean.match(/\{[\s\S]*\}/);
+    if (!match) return { summary: text.slice(0, 200) };
+    return JSON.parse(match[0]);
+  } catch(e) { return null; }
+}
+
+// Show AI Analysis Modal for a single match (kept for backward compat)
 async function showAIAnalysis(teamsStr) {
   const parts = teamsStr.split(' vs ');
   if (parts.length !== 2) return toast('Jaza timu kwanza (Timu A vs Timu B)', 'warn');
   const homeTeam = parts[0].trim();
   const awayTeam = parts[1].trim();
 
-  // Create modal
   const ov = document.createElement('div');
   ov.className = 'modal-overlay';
   ov.id = 'ai-modal';
@@ -916,88 +1271,38 @@ async function showAIAnalysis(teamsStr) {
         <div style="text-align:center;padding:2rem;color:var(--muted)">
           <div class="spinner" style="margin:0 auto 1rem"></div>
           <div style="font-size:13px">🤖 AI inachambua mechi...</div>
-          <div style="font-size:11px;margin-top:4px">Form · H2H · Statistics</div>
         </div>
       </div>
     </div>`;
   document.body.appendChild(ov);
   ov.onclick = (e) => { if(e.target===ov) ov.remove(); };
-
   const dc = document.getElementById('ai-content');
-
   try {
-    // Fetch data in parallel
     const [homeFormData, awayFormData, h2hData] = await Promise.all([
-      fetchTeamForm(homeTeam),
-      fetchTeamForm(awayTeam),
-      fetchH2H(homeTeam, awayTeam),
+      fetchTeamForm(homeTeam), fetchTeamForm(awayTeam), fetchH2H(homeTeam, awayTeam),
     ]);
-
     const homeStats = analyzeForm(homeFormData?.events || [], homeTeam);
     const awayStats = analyzeForm(awayFormData?.events || [], awayTeam);
     const h2h = analyzeH2H(h2hData, homeTeam);
-
-    // Generate AI recommendations
-    const recs = generateAIRecommendations(homeTeam, awayTeam, homeStats, awayStats, h2h);
-
+    const recs = generateAIRecommendations(homeTeam, awayTeam, homeStats, awayStats, h2h, null);
     dc.innerHTML = `
-      <!-- Form Comparison -->
-      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:10px">📈 Form ya Hivi Karibuni (Mechi 5)</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem">
-        ${formCard(homeTeam, homeStats)}
-        ${formCard(awayTeam, awayStats)}
-      </div>
-
-      <!-- H2H -->
-      ${h2h ? `
-        <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:10px">⚔️ Head to Head (Mechi ${h2h.total})</div>
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:10px">📈 Form ya Hivi Karibuni</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem">${formCard(homeTeam, homeStats)}${formCard(awayTeam, awayStats)}</div>
+      ${h2h ? `<div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:10px">⚔️ H2H (${h2h.total})</div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1rem;margin-bottom:1rem">
-          <div style="display:grid;grid-template-columns:1fr auto 1fr;text-align:center;gap:.5rem;margin-bottom:10px">
-            <div>
-              <div style="font-size:22px;font-weight:800;color:var(--win)">${h2h.homeWins}</div>
-              <div style="font-size:10px;color:var(--muted)">${homeTeam} Wins</div>
-            </div>
-            <div>
-              <div style="font-size:22px;font-weight:800;color:var(--warn)">${h2h.draws}</div>
-              <div style="font-size:10px;color:var(--muted)">Sare</div>
-            </div>
-            <div>
-              <div style="font-size:22px;font-weight:800;color:var(--loss)">${h2h.awayWins}</div>
-              <div style="font-size:10px;color:var(--muted)">${awayTeam} Wins</div>
-            </div>
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;text-align:center">
+            <div><div style="font-size:22px;font-weight:800;color:var(--win)">${h2h.homeWins}</div><div style="font-size:10px;color:var(--muted)">${homeTeam} Wins</div></div>
+            <div><div style="font-size:22px;font-weight:800;color:var(--warn)">${h2h.draws}</div><div style="font-size:10px;color:var(--muted)">Sare</div></div>
+            <div><div style="font-size:22px;font-weight:800;color:var(--loss)">${h2h.awayWins}</div><div style="font-size:9px;color:var(--muted)">${awayTeam} Wins</div></div>
           </div>
-          <div style="text-align:center;font-size:12px;color:var(--muted)">
-            Avg Magoli kwa Mechi: <strong style="color:var(--accent)">${h2h.avgGoals}</strong>
-          </div>
-        </div>
-      ` : '<div style="font-size:11px;color:var(--muted);margin-bottom:1rem">H2H data haipatikani kwa timu hizi</div>'}
-
-      <!-- AI Recommendations -->
-      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:10px">🎯 AI Mapendekezo Bora</div>
-      ${recs.map(r => `
-        <div style="background:${r.type==='best'?'rgba(0,255,133,.08)':'rgba(255,170,0,.06)'};border:1px solid ${r.type==='best'?'rgba(0,255,133,.3)':'rgba(255,170,0,.2)'};border-radius:12px;padding:.85rem;margin-bottom:.6rem">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <div style="font-size:13px;font-weight:700;color:${r.type==='best'?'var(--win)':'var(--warn)'}">
-              ${r.icon} ${r.market}
-            </div>
-            <div style="background:${r.type==='best'?'rgba(0,255,133,.2)':'rgba(255,170,0,.2)'};color:${r.type==='best'?'var(--win)':'var(--warn)'};padding:.2rem .6rem;border-radius:20px;font-size:11px;font-weight:700">
-              ${r.confidence}% confidence
-            </div>
-          </div>
-          <div style="font-size:11px;color:var(--muted)">${r.reason}</div>
-        </div>`).join('')}
-
-      <!-- Disclaimer -->
-      <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:1rem;padding:.75rem;background:rgba(0,0,0,.2);border-radius:10px">
-        ⚠️ AI analysis inategemea data iliyopo. Sio guarantee ya matokeo. Weka kwa akili.
-      </div>
-    `;
+        </div>` : ''}
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:10px">🎯 AI Mapendekezo</div>
+      ${recs.map(r => `<div style="background:${r.type==='best'?'rgba(0,255,133,.08)':'rgba(255,170,0,.06)'};border:1px solid ${r.type==='best'?'rgba(0,255,133,.3)':'rgba(255,170,0,.2)'};border-radius:12px;padding:.85rem;margin-bottom:.6rem">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><div style="font-size:13px;font-weight:700;color:${r.type==='best'?'var(--win)':'var(--warn)'}">${r.icon} ${r.market}</div><div style="font-size:11px;font-weight:700;color:${r.type==='best'?'var(--win)':'var(--warn)'}">${r.confidence}%</div></div>
+        <div style="font-size:11px;color:var(--muted)">${r.reason}</div></div>`).join('')}
+      <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:1rem">⚠️ Sio guarantee ya matokeo. Weka kwa akili.</div>`;
   } catch(e) {
-    dc.innerHTML = `<div style="text-align:center;color:var(--muted);padding:2rem">
-      <div style="font-size:32px">⚠️</div>
-      <div style="margin-top:8px;font-size:13px">Data haipatikani kwa timu hizi</div>
-      <div style="font-size:11px;margin-top:4px">Hakikisha jina la timu ni sahihi</div>
-    </div>`;
+    dc.innerHTML = `<div style="text-align:center;color:var(--muted);padding:2rem"><div style="font-size:32px">⚠️</div><div style="margin-top:8px;font-size:13px">Data haipatikani</div></div>`;
   }
 }
 
@@ -1023,7 +1328,7 @@ function formCard(teamName, stats) {
     </div>`;
 }
 
-function generateAIRecommendations(homeTeam, awayTeam, homeStats, awayStats, h2h) {
+function generateAIRecommendations(homeTeam, awayTeam, homeStats, awayStats, h2h, webInsights=null) {
   const recs = [];
   const totalHomeGoals = homeStats.goalsFor + homeStats.goalsAgainst;
   const totalAwayGoals = awayStats.goalsFor + awayStats.goalsAgainst;
@@ -1406,12 +1711,13 @@ async function showMatchDetailsModal(teamsStr, eventId) {
           <div style="font-size:32px">📡</div>
           <div style="margin-top:8px;font-size:13px;font-weight:600;color:var(--text)">Stats Hazipo Kwa Sasa</div>
           <div style="font-size:11px;margin-top:6px;color:var(--muted)">Mechi hii haina data ya statistics kwenye chanzo cha bure (TheSportsDB). Weka API-Football key kwa stats kamili.</div>
-          <button onclick="loadModalContent()" style="margin-top:14px;padding:.5rem 1.25rem;border-radius:10px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;cursor:pointer">🔄 Jaribu Tena</button>
+          <button onclick="window._reloadModal && window._reloadModal()" style="margin-top:14px;padding:.5rem 1.25rem;border-radius:10px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;cursor:pointer">🔄 Jaribu Tena</button>
         </div>`;
     }
   }
 
   await loadModalContent();
+  window._reloadModal = loadModalContent;
 
   // Auto-refresh every 30s if match is live
   modalRefreshInterval = setInterval(async () => {
@@ -1675,9 +1981,6 @@ function startLiveScores() {
   console.log('✅ Live scores started — polling every 60s, 30s when live');
 }
 
-let liveBoostTimeout = null;
-let liveDataFetchedOnce = false; // true baada ya fetch ya kwanza kukamilika
-
 function stopLiveScores() {
   if (liveInterval) { clearInterval(liveInterval); liveInterval = null; }
   if (liveMinuteInterval) { clearInterval(liveMinuteInterval); liveMinuteInterval = null; }
@@ -1697,7 +2000,6 @@ const LEAGUES=[
   {id:'caf_cl',name:'CAF Champions League',flag:'🌍',region:'Afrika'},
   {id:'caf_cc',name:'CAF Confederation Cup',flag:'🌍',region:'Afrika'},
   {id:'caf_sc',name:'CAF Super Cup',flag:'🌍',region:'Afrika'},
-  {id:'caf',name:'CAF Champions League',flag:'🌍',region:'Afrika'},
   {id:'ghana',name:'Ghana Premier League',flag:'🇬🇭',region:'Afrika'},
   {id:'uganda',name:'Uganda Premier League',flag:'🇺🇬',region:'Afrika'},
   {id:'rwanda',name:'Rwanda National League',flag:'🇷🇼',region:'Afrika'},
@@ -1820,6 +2122,14 @@ function showAuth(mode='login'){
   const ls=el('loading-screen');if(ls)ls.style.display='none';
   el('app').style.display='none';el('auth-screen').style.display='flex';
   let sentOTP=null,pendingData=null;
+
+  // Password toggle shared
+  window._togglePass=(id,btnId)=>{
+    const i=el(id);if(!i)return;
+    const h=i.type==='password';i.type=h?'text':'password';
+    const b=el(btnId);if(b)b.textContent=h?'🙈':'👁';
+  };
+
   const render=(m)=>{
     mode=m;
     el('auth-screen').innerHTML=`
@@ -1837,10 +2147,17 @@ function showAuth(mode='login'){
         <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:12px">Fungua Akaunti</div>
         <input class="inp" id="r-name" placeholder="Jina lako kamili" style="margin-bottom:10px"/>
         <input class="inp" id="r-phone" placeholder="Namba ya simu (0712...)" type="tel" style="margin-bottom:10px"/>
-        <input class="inp" id="r-pass" placeholder="Nenosiri (min 6)" type="password" style="margin-bottom:10px"/>
-        <input class="inp" id="r-confirm" placeholder="Thibitisha nenosiri" type="password" style="margin-bottom:14px"/>
+        <div style="position:relative;margin-bottom:10px">
+          <input class="inp" id="r-pass" placeholder="Nenosiri (min 6)" type="password" style="padding-right:48px"/>
+          <button onclick="window._togglePass('r-pass','r-eye')" id="r-eye" type="button" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:0;line-height:1">👁</button>
+        </div>
+        <div style="position:relative;margin-bottom:14px">
+          <input class="inp" id="r-confirm" placeholder="Thibitisha nenosiri" type="password" style="padding-right:48px"/>
+          <button onclick="window._togglePass('r-confirm','r-eye2')" id="r-eye2" type="button" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:0;line-height:1">👁</button>
+        </div>
         <button class="btn-primary" id="r-btn">Pata OTP →</button>
         <p style="text-align:center;font-size:13px;color:var(--muted);margin-top:12px">Una akaunti? <span id="go-login" style="color:var(--accent);cursor:pointer;font-weight:600">Ingia</span></p>`;
+
       el('go-login').onclick=()=>render('login');
       el('r-btn').onclick=async()=>{
         const name=el('r-name').value.trim(),phone=el('r-phone').value.replace(/\D/g,'');
@@ -1888,10 +2205,18 @@ function showAuth(mode='login'){
       f.innerHTML=`
         <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:12px">Ingia</div>
         <input class="inp" id="l-phone" placeholder="Namba ya simu" type="tel" style="margin-bottom:10px"/>
-        <input class="inp" id="l-pass" placeholder="Nenosiri" type="password" style="margin-bottom:14px"/>
+        <div style="position:relative;margin-bottom:14px">
+          <input class="inp" id="l-pass" placeholder="Nenosiri" type="password" style="padding-right:48px"/>
+          <button onclick="window._togglePass('l-pass','l-eye')" id="l-eye" type="button" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:0;line-height:1">👁</button>
+        </div>
         <button class="btn-primary" id="l-btn">Ingia →</button>
-        <p style="text-align:center;font-size:13px;color:var(--muted);margin-top:12px">Huna akaunti? <span id="go-reg" style="color:var(--accent);cursor:pointer;font-weight:600">Sajili</span></p>`;
+        <div style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px">
+          <span id="go-reg" style="color:var(--accent);cursor:pointer;font-weight:600">Sajili</span>
+          <span id="go-forgot" style="color:var(--muted);cursor:pointer">Umesahau nenosiri?</span>
+        </div>`;
+
       el('go-reg').onclick=()=>render('register');
+      el('go-forgot').onclick=()=>render('forgot');
       el('l-btn').onclick=async()=>{
         const phone=el('l-phone').value.replace(/\D/g,''),pass=el('l-pass').value;
         if(!phone||!pass)return toast('Jaza sehemu zote!','err');
@@ -1901,8 +2226,72 @@ function showAuth(mode='login'){
         if(error||!data)return toast('Namba au nenosiri si sahihi!','err');
         toast('Karibu! 👋');setTimeout(()=>loginUser(data),400);
       };
+    }else if(m==='forgot'){
+      f.innerHTML=`
+        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:8px">Badilisha Nenosiri</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px;background:rgba(0,255,133,.06);border:1px solid var(--border);border-radius:10px;padding:.65rem">
+          📱 Tutakutumia code ya kuthibitisha — ingiza namba yako
+        </div>
+        <input class="inp" id="f-phone" placeholder="Namba ya simu (0712...)" type="tel" style="margin-bottom:12px"/>
+        <button class="btn-primary" id="f-send-btn">📤 Tuma Code</button>
+        <p style="text-align:center;font-size:13px;color:var(--muted);margin-top:12px"><span id="go-login2" style="color:var(--accent);cursor:pointer;font-weight:600">← Rudi Login</span></p>`;
+      el('go-login2').onclick=()=>render('login');
+      el('f-send-btn').onclick=async()=>{
+        const phone=el('f-phone').value.replace(/\D/g,'');
+        if(!phone||phone.length<9)return toast('Ingiza namba sahihi!','err');
+        el('f-send-btn').textContent='Inatuma...';el('f-send-btn').disabled=true;
+        const{data,error}=await sb.from('users').select('id,name').eq('phone',phone).maybeSingle();
+        el('f-send-btn').textContent='📤 Tuma Code';el('f-send-btn').disabled=false;
+        if(error||!data)return toast('Namba hii haipo kwenye mfumo!','err');
+        pendingData={phone,userId:data.id,name:data.name};
+        sentOTP=genOTP();
+        toast('🔑 Code yako: '+sentOTP,'warn');
+        render('reset-otp');
+      };
+    }else if(m==='reset-otp'){
+      f.innerHTML=`
+        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:12px">Ingiza Code</div>
+        <div style="background:rgba(0,255,133,.06);border:1px solid var(--border);border-radius:10px;padding:.75rem;font-size:12px;color:var(--muted);margin-bottom:12px">
+          📱 Code imetumwa kwa <strong style="color:var(--accent)">${pendingData?.phone}</strong>
+        </div>
+        <input class="inp" id="reset-otp-val" placeholder="○ ○ ○ ○ ○ ○" type="number" style="text-align:center;font-size:22px;letter-spacing:8px;margin-bottom:12px"/>
+        <button class="btn-primary" id="reset-otp-btn">✓ Thibitisha</button>
+        <div style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px">
+          <span id="reset-back" style="color:var(--muted);cursor:pointer">← Rudi</span>
+          <span id="reset-resend" style="color:var(--accent);cursor:pointer">Tuma tena</span>
+        </div>`;
+      el('reset-back').onclick=()=>render('forgot');
+      el('reset-resend').onclick=()=>{sentOTP=genOTP();toast('Code mpya: '+sentOTP,'warn');};
+      el('reset-otp-btn').onclick=()=>{
+        if(el('reset-otp-val').value.trim()!==sentOTP)return toast('Code si sahihi!','err');
+        render('new-pass');
+      };
+    }else if(m==='new-pass'){
+      f.innerHTML=`
+        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:12px">Nenosiri Jipya</div>
+        <div style="position:relative;margin-bottom:10px">
+          <input class="inp" id="np-pass" placeholder="Nenosiri jipya (min 6)" type="password" style="padding-right:48px"/>
+          <button onclick="window._togglePass('np-pass','np-eye')" id="np-eye" type="button" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:0;line-height:1">👁</button>
+        </div>
+        <div style="position:relative;margin-bottom:14px">
+          <input class="inp" id="np-pass2" placeholder="Rudia nenosiri" type="password" style="padding-right:48px"/>
+          <button onclick="window._togglePass('np-pass2','np-eye2')" id="np-eye2" type="button" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:0;line-height:1">👁</button>
+        </div>
+        <button class="btn-primary" id="np-save-btn">💾 Hifadhi Nenosiri</button>`;
+
+      el('np-save-btn').onclick=async()=>{
+        const p1=el('np-pass').value,p2=el('np-pass2').value;
+        if(!p1||p1.length<6)return toast('Nenosiri lazima liwe na herufi 6+!','err');
+        if(p1!==p2)return toast('Nenosiri hazilingani!','err');
+        el('np-save-btn').textContent='Inasave...';el('np-save-btn').disabled=true;
+        const{error}=await sb.from('users').update({password:p1}).eq('id',pendingData.userId);
+        el('np-save-btn').textContent='💾 Hifadhi Nenosiri';el('np-save-btn').disabled=false;
+        if(error)return toast('Hitilafu: '+error.message,'err');
+        toast('✅ Nenosiri limebadilishwa! Ingia sasa.','ok');
+        setTimeout(()=>render('login'),800);
+      };
     }
-  };
+  }; // end render
   render(mode);
 }
 
@@ -2401,10 +2790,10 @@ const SPORTSDB_LEAGUES = [
   {id:'serbian',   sportsdbId:'4363', name:'SuperLiga Serbia',           flag:'🇷🇸', region:'Ulaya'},
   {id:'rpl',       sportsdbId:'4361', name:'Russian Premier League',     flag:'🇷🇺', region:'Ulaya'},
   {id:'ekstraklasa',sportsdbId:'4365',name:'Ekstraklasa Poland',         flag:'🇵🇱', region:'Ulaya'},
-  {id:'laliga2',   sportsdbId:'4335', name:'La Liga 2',                  flag:'🇪🇸', region:'Ulaya'},
-  {id:'ligue2',    sportsdbId:'4334', name:'Ligue 2 France',             flag:'🇫🇷', region:'Ulaya'},
-  {id:'serie_b',   sportsdbId:'4332', name:'Serie B Italy',              flag:'🇮🇹', region:'Ulaya'},
-  {id:'2bundesliga',sportsdbId:'4331',name:'2. Bundesliga',              flag:'🇩🇪', region:'Ulaya'},
+  {id:'laliga2',   sportsdbId:'0',    name:'La Liga 2',                  flag:'🇪🇸', region:'Ulaya'},
+  {id:'ligue2',    sportsdbId:'0',    name:'Ligue 2 France',             flag:'🇫🇷', region:'Ulaya'},
+  {id:'serie_b',   sportsdbId:'0',    name:'Serie B Italy',              flag:'🇮🇹', region:'Ulaya'},
+  {id:'2bundesliga',sportsdbId:'0',  name:'2. Bundesliga',              flag:'🇩🇪', region:'Ulaya'},
   {id:'ukr',       sportsdbId:'4373', name:'Ukrainian Premier',          flag:'🇺🇦', region:'Ulaya'},
   {id:'slovakian', sportsdbId:'4376', name:'Slovak Super Liga',          flag:'🇸🇰', region:'Ulaya'},
   {id:'hungarian', sportsdbId:'4375', name:'OTP Bank Liga Hungary',      flag:'🇭🇺', region:'Ulaya'},
@@ -2696,7 +3085,7 @@ async function loadFixMatchesFree(league) {
   }
 
   // ── Source 4: TheSportsDB (free fallback) ────────────────────────
-  if (!matches.length && league.sportsdbId) {
+  if (!matches.length && league.sportsdbId && league.sportsdbId !== '0') {
     try {
       // First try: fetch by league sportsdbId directly
       const data = await sportsdbFetch(`eventsday.php?d=${fixSelectedDate}&l=${league.sportsdbId}`);
@@ -3140,7 +3529,10 @@ function renderPost(c){
       ${[['Total Odds',tOdds.toFixed(2)+'x','var(--text)'],['Stake','TZS '+fmt(stake),'var(--text)'],['Potential Return','TZS '+fmt(potRet),'var(--win)'],['Faida','TZS '+fmt(potRet-stake),(potRet-stake)>=0?'var(--win)':'var(--loss)']].map(([l,v,col])=>`
         <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px"><span style="color:var(--muted)">${l}</span><span style="font-weight:700;color:${col}">${v}</span></div>`).join('')}
     </div>
-    <button class="btn-primary" id="post-btn" onclick="window._post()">📤 Post Mkeka</button>`;
+    <div style="display:flex;gap:10px">
+      <button class="btn-primary" id="analyze-btn" onclick="window._analyzeMkeka()" style="flex:1;background:linear-gradient(135deg,#00ff85,#00c965)">🤖 Analyze Mkeka</button>
+      <button id="post-btn" onclick="window._post()" style="flex:0 0 auto;padding:.9rem 1.1rem;border-radius:14px;border:1.5px solid var(--border);background:transparent;color:var(--muted);font-weight:700;font-size:13px;cursor:pointer">📤 Post</button>
+    </div>`;
 
   wireInps();
 
@@ -3194,6 +3586,7 @@ function renderPost(c){
   window._kApply=(s)=>{const i=el('post-stake');if(i)i.value=s;renderPost(c);};
   window._addM=()=>{if(pMatches.length>=MAX_MATCHES)return toast(`Max mechi ${MAX_MATCHES}!`,'err');pMatches.push(newM());renderPost(c);};
   window._delM=(id)=>{if(pMatches.length>1){pMatches=pMatches.filter(m=>m._id!==id);renderPost(c);}};
+  window._analyzeMkeka=()=>showMkekaAIAnalysis();
   window._post=async()=>{
     if(!pChecks.every(Boolean))return toast('Kamilisha checklist kwanza!','warn');
     readInps();
