@@ -647,6 +647,9 @@ async function autoSettleMatches() {
         const hasLoss = (freshMatches || []).some(m => m.outcome === 'LOSS');
         const allVoid = (freshMatches || []).every(m => m.outcome === 'VOID');
         const newStatus = hasLoss ? 'LOST' : allVoid ? 'VOID' : 'WON';
+        // Kinga ya double-settle: angalia hali ya sasa kwenye DB
+        const { data: mkFresh } = await sb.from('mikeka').select('status').eq('id', mk.id).maybeSingle();
+        if (mkFresh?.status !== 'PENDING') continue; // tayari imesettled
         await sb.from('mikeka').update({ status: newStatus }).eq('id', mk.id);
         
         const mkName = mk.name || `Mkeka #${mk.id.slice(-4)}`;
@@ -654,15 +657,21 @@ async function autoSettleMatches() {
         const total = freshMatches.length;
 
         if (newStatus === 'WON') {
-          const gain = (mk.potential_return || 0) - (mk.stake || 0);
-          await updateUser({ bankroll: currentUser.bankroll + gain });
-          showNotification('🎉 MKEKA UMESHINDA!', `${mkName}\n${wonCount}/${total} zimeshinda\n+TZS ${fmt(gain)}`, 'win');
-          toast(`🎉 MKEKA WON! +TZS ${fmt(gain)}`, 'ok');
+          // Rudisha potential_return yote (stake iliishapigwa wakati wa POST)
+          const payout = (mk.potential_return || 0);
+          await updateUser({ bankroll: currentUser.bankroll + payout });
+          showNotification('🎉 MKEKA UMESHINDA!', `${mkName}\n${wonCount}/${total} zimeshinda\n+TZS ${fmt(payout - (mk.stake||0))} faida`, 'win');
+          toast(`🎉 MKEKA WON! Payout: TZS ${fmt(payout)}`, 'ok');
         } else if (newStatus === 'LOST') {
+          // Stake tayari ilipigwa — hakuna kubadilisha bankroll
           showNotification('❌ Mkeka Umepoteza', `${mkName}\n${wonCount}/${total} zilishinda`, 'loss');
           toast(`❌ Mkeka Imepotea — ${mkName}`, 'err');
         } else {
+          // VOID: rudisha stake tu
+          const stakeBack = mk.stake || 0;
+          if (stakeBack > 0) await updateUser({ bankroll: currentUser.bankroll + stakeBack });
           showNotification('⬜ Mkeka VOID', mkName);
+          toast(`⬜ VOID — Stake TZS ${fmt(stakeBack)} imerudishwa`, 'info');
         }
         await loadData();
         if (['home','mikeka','results'].includes(currentTab)) showTab(currentTab);
@@ -3055,9 +3064,8 @@ window._cashoutMkeka = (mkId, stake, potReturn) => {
       return toast('Hitilafu: ' + error.message, 'err');
     }
 
-    // Update bankroll: refund stake + cashout profit
-    const gain = amt - stake; // could be negative if cashed out less than stake
-    const newBankroll = currentUser.bankroll + amt; // add full cashout amount back
+    // Stake iliishapigwa wakati wa POST — ongeza cashout amount tu kurudi bankroll
+    const newBankroll = currentUser.bankroll + amt;
     await updateUser({ bankroll: newBankroll });
 
     toast(`💵 Cashout ya TZS ${fmt(amt)} imesajiliwa!`, 'ok');
@@ -3195,6 +3203,7 @@ function renderPost(c){
     const name=el('post-name')?.value||`Mkeka ${mikeka.length+1}`;
     const date=el('post-date')?.value||today();
     const stake=parseInt(el('post-stake')?.value||5000);
+    if(stake > currentUser.bankroll) return toast(`Bankroll haitoshi! Una TZS ${fmt(currentUser.bankroll)} tu`,'err');
     const ana=el('post-ana')?.value||'';
     const tOdds=pMatches.reduce((p,m)=>p*(parseFloat(m.odds)||1),1);
     const potRet=Math.round(tOdds*stake);
@@ -3205,7 +3214,10 @@ function renderPost(c){
     const{error:e2}=await sb.from('matches').insert(pMatches.map(m=>({id:uid(),mkeka_id:mId,teams:m.teams,league:m.league,market:m.market,pick:m.pick,odds:parseFloat(m.odds),outcome:'PENDING'})));
     btn.textContent='📤 Post Mkeka';btn.disabled=false;
     if(e2)return toast('Hitilafu ya mechi: '+e2.message,'err');
-    toast('Mkeka umewekwa! 🎯');
+    // ── Punguza stake kutoka bankroll mara moja mkeka ukiwekwa ──
+    const newBk = currentUser.bankroll - stake;
+    await updateUser({ bankroll: newBk });
+    toast(`Mkeka umewekwa! 🎯 Stake -TZS ${fmt(stake)}`);
     pMatches=[newM()];pChecks=[false,false,false,false];
     await loadData();showTab('mikeka');
   };
@@ -3273,10 +3285,25 @@ function renderResults(c){
     if(allDone){
       const hasLoss=all.some(m=>m.outcome==='LOSS'),allVoid=all.every(m=>m.outcome==='VOID');
       const newS=hasLoss?'LOST':allVoid?'VOID':'WON';
+      // Kinga: angalia hali ya sasa kabla ya kubadilisha (epuka double-settle)
+      const{data:mkCurrent}=await sb.from('mikeka').select('status').eq('id',mId).maybeSingle();
+      if(mkCurrent?.status !== 'PENDING') { await loadData(); renderResults(c); return; }
       await sb.from('mikeka').update({status:newS}).eq('id',mId);
       const mk=mikeka.find(m=>m.id===mId);
-      if(newS==='WON'&&mk){const gain=(mk.potential_return||0)-(mk.stake||0);await updateUser({bankroll:currentUser.bankroll+gain});toast(`🎉 Umeshinda! +TZS ${fmt(gain)}`);}
-      else if(newS==='LOST')toast('Mkeka umepoteza. Jaribu tena! 💪','warn');
+      if(newS==='WON'&&mk){
+        // Rudisha potential_return yote (stake iliishapigwa wakati wa POST)
+        const payout = mk.potential_return || 0;
+        await updateUser({bankroll: currentUser.bankroll + payout});
+        toast(`🎉 Umeshinda! +TZS ${fmt(payout)} (faida: +TZS ${fmt(payout - (mk.stake||0))})`);
+      } else if(newS==='LOST') {
+        // Stake tayari ilipigwa — hakuna kubadilisha
+        toast('Mkeka umepoteza. Jaribu tena! 💪','warn');
+      } else if(newS==='VOID') {
+        // VOID: rudisha stake tu
+        const stakeBack = mk?.stake || 0;
+        if(stakeBack > 0) await updateUser({bankroll: currentUser.bankroll + stakeBack});
+        toast(`⬜ VOID — Stake ya TZS ${fmt(stakeBack)} imerudishwa`,'info');
+      }
     }
     await loadData();renderResults(c);
   };
@@ -3644,12 +3671,20 @@ async function renderAdmin(c){
     renderAdmin(c);
   };
   window._adSettle=async(mkId,newStatus,userId,potReturn,stake)=>{
+    // Kinga: angalia hali ya sasa kabla ya kubadilisha
+    const{data:mkCur}=await sb.from('mikeka').select('status').eq('id',mkId).maybeSingle();
+    if(mkCur?.status !== 'PENDING'){toast('Mkeka huu tayari umesettled','warn');await loadData();renderAdmin(c);return;}
     await sb.from('mikeka').update({status:newStatus}).eq('id',mkId);
     if(newStatus==='WON'){
-      const gain=(potReturn||0)-(stake||0);
+      // Rudisha potential_return yote (stake iliishapigwa wakati wa POST)
       const{data:u}=await sb.from('users').select('bankroll').eq('id',userId).maybeSingle();
-      if(u){const nb=(u.bankroll||0)+gain;await sb.from('users').update({bankroll:nb}).eq('id',userId);if(userId===currentUser.id)await updateUser({bankroll:nb});}
-      toast(`✅ WON! +TZS ${fmt(gain)}`,'ok');
+      if(u){const nb=(u.bankroll||0)+(potReturn||0);await sb.from('users').update({bankroll:nb}).eq('id',userId);if(userId===currentUser.id)await updateUser({bankroll:nb});}
+      toast(`✅ WON! Payout TZS ${fmt(potReturn||0)}`,'ok');
+    }else if(newStatus==='VOID'){
+      // VOID: rudisha stake tu
+      const{data:u}=await sb.from('users').select('bankroll').eq('id',userId).maybeSingle();
+      if(u&&stake){const nb=(u.bankroll||0)+(stake||0);await sb.from('users').update({bankroll:nb}).eq('id',userId);if(userId===currentUser.id)await updateUser({bankroll:nb});}
+      toast(`⬜ VOID — Stake TZS ${fmt(stake||0)} imerudishwa`,'info');
     }else{toast(`Settled: ${newStatus}`);}
     await loadData();renderAdmin(c);
   };
@@ -3660,12 +3695,20 @@ async function renderAdmin(c){
     if(allDone){
       const hasLoss=(fm||[]).some(m=>m.outcome==='LOSS'),allVoid=(fm||[]).every(m=>m.outcome==='VOID');
       const ns=hasLoss?'LOST':allVoid?'VOID':'WON';
+      // Kinga ya double-settle
+      const{data:mkCur}=await sb.from('mikeka').select('status').eq('id',mkId).maybeSingle();
+      if(mkCur?.status !== 'PENDING'){toast('Mkeka huu tayari umesettled','warn');await loadData();renderAdmin(c);return;}
       await sb.from('mikeka').update({status:ns}).eq('id',mkId);
       if(ns==='WON'){
-        const gain=(potReturn||0)-(stake||0);
+        // Rudisha potential_return yote
         const{data:u}=await sb.from('users').select('bankroll').eq('id',userId).maybeSingle();
-        if(u){const nb=(u.bankroll||0)+gain;await sb.from('users').update({bankroll:nb}).eq('id',userId);if(userId===currentUser.id)await updateUser({bankroll:nb});}
-        toast(`🎉 WON! +TZS ${fmt(gain)}`,'ok');
+        if(u){const nb=(u.bankroll||0)+(potReturn||0);await sb.from('users').update({bankroll:nb}).eq('id',userId);if(userId===currentUser.id)await updateUser({bankroll:nb});}
+        toast(`🎉 WON! Payout TZS ${fmt(potReturn||0)}`,'ok');
+      }else if(ns==='VOID'){
+        // Rudisha stake tu
+        const{data:u}=await sb.from('users').select('bankroll').eq('id',userId).maybeSingle();
+        if(u&&stake){const nb=(u.bankroll||0)+(stake||0);await sb.from('users').update({bankroll:nb}).eq('id',userId);if(userId===currentUser.id)await updateUser({bankroll:nb});}
+        toast(`⬜ VOID — Stake TZS ${fmt(stake||0)} imerudishwa`,'info');
       }else{toast(`Settled: ${ns}`);}
     }else{toast(`Match → ${outcome}`,'info');}
     await loadData();renderAdmin(c);
