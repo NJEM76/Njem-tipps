@@ -112,6 +112,7 @@ const LOSS_STREAK_LIMIT=3;
 let APISPORTS_KEY    = localStorage.getItem('njem_apisports_key')    || '';
 let ALLSPORTS_KEY    = localStorage.getItem('njem_allsports_key')    || '';
 let SPORTMONKS_KEY   = localStorage.getItem('njem_sportmonks_key')   || '';
+let FOOTBALLDATA_KEY = localStorage.getItem('njem_footballdata_key') || '';
 const SPORTSDB_KEY   = '447279';
 
 // ── API-Football league IDs (api-sports.io) ──────────────────────────
@@ -265,6 +266,70 @@ const SPORTMONKS_LEAGUE_IDS = {
   'jleague':     16,    // J-League
   'saudi':       307,   // Saudi Pro League
 };
+
+// ── football-data.org league IDs ─────────────────────────────────────
+// Free tier: 12 top leagues, 10 req/min
+const FOOTBALLDATA_LEAGUE_IDS = {
+  'epl':        'PL',   // Premier League
+  'laliga':     'PD',   // Primera Division (La Liga)
+  'bundesliga': 'BL1',  // Bundesliga
+  'seriea':     'SA',   // Serie A
+  'ligue1':     'FL1',  // Ligue 1
+  'ucl':        'CL',   // Champions League
+  'uel':        'EL',   // Europa League
+  'championship':'ELC', // Championship
+  'eredivisie': 'DED',  // Eredivisie
+  'primeira':   'PPL',  // Primeira Liga
+  'brasileirao':'BSA',  // Brasileirao Serie A
+  'ecl':        'EC',   // European Championship
+};
+
+async function footballdataFetch(endpoint) {
+  if (!FOOTBALLDATA_KEY) return null;
+  try {
+    const url = `https://api.football-data.org/v4/${endpoint.replace(/^\//, '')}`;
+    const res = await fetch(url, { headers: { 'X-Auth-Token': FOOTBALLDATA_KEY } });
+    if (res.status === 429) { console.warn('football-data.org rate limit'); return { _rateLimit: true }; }
+    if (!res.ok) { console.warn('football-data.org HTTP', res.status); return null; }
+    return await res.json();
+  } catch(e) { console.warn('football-data.org fetch:', e.message); return null; }
+}
+
+function normaliseFootballData(match, nowMs) {
+  const home = match.homeTeam?.name;
+  const away = match.awayTeam?.name;
+  if (!home || !away) return null;
+  const st = match.status || 'TIMED';
+  // football-data statuses: TIMED, SCHEDULED, IN_PLAY, PAUSED, FINISHED, POSTPONED, SUSPENDED, CANCELLED
+  const isLive = ['IN_PLAY','PAUSED'].includes(st);
+  const isFinished = ['FINISHED'].includes(st);
+  const minuteNum = match.minute || 0;
+  let minuteDisplay = '';
+  if (st === 'PAUSED') { minuteDisplay = 'HT'; }
+  else if (isLive && minuteNum) { minuteDisplay = minuteNum + "'"; }
+  else if (isLive) { minuteDisplay = 'LIVE'; }
+  else if (isFinished) { minuteDisplay = 'FT'; }
+  const hg = match.score?.fullTime?.home ?? (isLive ? (match.score?.halfTime?.home ?? '-') : '-');
+  const ag = match.score?.fullTime?.away ?? (isLive ? (match.score?.halfTime?.away ?? '-') : '-');
+  return {
+    home: hg, away: ag,
+    homeTeam: home, awayTeam: away,
+    minute: minuteDisplay, minuteNum, status: st,
+    league: match.competition?.name || '', leagueLogo: '',
+    country: match.area?.name || '',
+    fixtureId: match.id,
+    time: match.utcDate ? (() => {
+      try {
+        const d = new Date(match.utcDate);
+        const eat = new Date(d.getTime() + 3 * 60 * 60 * 1000);
+        return eat.toTimeString().slice(0,5);
+      } catch { return ''; }
+    })() : '',
+    date: match.utcDate?.split('T')[0] || '',
+    fetchedAt: nowMs, isLive, isFinished,
+    isUpcoming: !isLive && !isFinished, _src: 'footballdata',
+  };
+}
 
 // ── TheSportsDB league IDs (fallback) ────────────────────────────────
 const LEAGUE_MAP = {
@@ -502,9 +567,9 @@ function ingestScoreData(scoreData) {
   if (!scoreData) return;
   const k1 = `${scoreData.homeTeam} vs ${scoreData.awayTeam}`.toLowerCase();
   const k2 = `${scoreData.awayTeam} vs ${scoreData.homeTeam}`.toLowerCase();
-  // Priority: apifootball > sportmonks > allsports > sportsdb
+  // Priority: apifootball > footballdata > sportmonks > allsports > sportsdb
   const existing = liveScores[k1];
-  const srcPriority = { apifootball: 3, sportmonks: 2, allsports: 1, sportsdb: 0 };
+  const srcPriority = { apifootball: 4, footballdata: 3, sportmonks: 2, allsports: 1, sportsdb: 0 };
   const existPri = srcPriority[existing?._src] ?? -1;
   const newPri   = srcPriority[scoreData._src] ?? -1;
   if (existing && existPri >= newPri) return;
@@ -535,7 +600,19 @@ async function fetchLiveScores() {
     } catch(e) { console.warn('API-Football live fetch:', e.message); }
   }
 
-  // ── Source 2: Sportmonks ──────────────────────────────────────────
+  // ── Source 2: football-data.org ──────────────────────────────────────
+  if (FOOTBALLDATA_KEY) {
+    try {
+      const fdData = await footballdataFetch('matches?status=LIVE');
+      const nowFd = Date.now();
+      (fdData?.matches || []).forEach(m => ingestScoreData(normaliseFootballData(m, nowFd)));
+      // Also fetch today's scheduled matches
+      const todayFd = await footballdataFetch(`matches?dateFrom=${todayStr}&dateTo=${todayStr}`);
+      (todayFd?.matches || []).forEach(m => ingestScoreData(normaliseFootballData(m, nowFd)));
+    } catch(e) { console.warn('football-data.org live fetch:', e.message); }
+  }
+
+  // ── Source 3: Sportmonks ──────────────────────────────────────────
   if (SPORTMONKS_KEY) {
     try {
       const smRes = await sportmonksFetch(`fixtures/date/${todayStr}?include=participants;scores;state;league`);
@@ -572,6 +649,7 @@ async function fetchLiveScores() {
   await autoSettleMatches();
   if (['results','mikeka','home'].includes(currentTab)) refreshLiveUI();
   if (currentTab === 'home') renderLiveSection();
+  if (currentTab === 'mikeka') { const c=el('content'); if(c) renderMikeka(c); }
   if (currentTab === 'fixtures') renderFixtures(el('content'));
 }
 
@@ -659,9 +737,11 @@ async function autoSettleMatches() {
         const total = freshMatches.length;
 
         if (newStatus === 'WON') {
-          // Rudisha potential_return yote (stake iliishapigwa wakati wa POST)
+          // Fetch fresh bankroll from DB to avoid stale state
+          const { data: freshUser } = await sb.from('users').select('bankroll').eq('id', currentUser.id).maybeSingle();
+          const currentBk = freshUser?.bankroll ?? currentUser.bankroll;
           const payout = (mk.potential_return || 0);
-          await updateUser({ bankroll: currentUser.bankroll + payout });
+          await updateUser({ bankroll: currentBk + payout });
           showNotification('🎉 MKEKA UMESHINDA!', `${mkName}\n${wonCount}/${total} zimeshinda\n+TZS ${fmt(payout - (mk.stake||0))} faida`, 'win');
           toast(`🎉 MKEKA WON! Payout: TZS ${fmt(payout)}`, 'ok');
         } else if (newStatus === 'LOST') {
@@ -671,7 +751,11 @@ async function autoSettleMatches() {
         } else {
           // VOID: rudisha stake tu
           const stakeBack = mk.stake || 0;
-          if (stakeBack > 0) await updateUser({ bankroll: currentUser.bankroll + stakeBack });
+          if (stakeBack > 0) {
+            const { data: freshUser2 } = await sb.from('users').select('bankroll').eq('id', currentUser.id).maybeSingle();
+            const currentBk2 = freshUser2?.bankroll ?? currentUser.bankroll;
+            await updateUser({ bankroll: currentBk2 + stakeBack });
+          }
           showNotification('⬜ Mkeka VOID', mkName);
           toast(`⬜ VOID — Stake TZS ${fmt(stakeBack)} imerudishwa`, 'info');
         }
@@ -752,7 +836,52 @@ function playNotificationSound(type = 'default') {
 }
 
 // Push notification — with sound + vibration
+// In-app notification history
+const _notifHistory = [];
+let _unreadNotifs = 0;
+
+function addNotifToHistory(title, body, type='default') {
+  _notifHistory.unshift({ title, body, type, time: new Date().toLocaleTimeString('sw-TZ',{hour:'2-digit',minute:'2-digit'}) });
+  if (_notifHistory.length > 50) _notifHistory.pop();
+  _unreadNotifs++;
+  // Update badge
+  const badge = document.getElementById('notif-cnt');
+  if (badge) { badge.textContent = _unreadNotifs > 9 ? '9+' : _unreadNotifs; badge.style.display='flex'; }
+}
+
+window._showNotifHistory = () => {
+  _unreadNotifs = 0;
+  const badge = document.getElementById('notif-cnt');
+  if (badge) badge.style.display = 'none';
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.id = 'notif-modal';
+  const typeColor = t => t==='win'?'var(--win)':t==='loss'?'var(--loss)':'var(--info)';
+  ov.innerHTML = `
+    <div class="modal-box" style="max-height:85vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+        <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800">🔔 Notifications</div>
+        <button onclick="document.getElementById('notif-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">×</button>
+      </div>
+      ${_notifHistory.length === 0
+        ? `<div class="empty"><div style="font-size:36px">🔔</div><div style="margin-top:8px;font-size:12px">Hakuna notifications bado</div></div>`
+        : _notifHistory.map(n=>`
+          <div style="background:rgba(0,0,0,.2);border:1px solid ${typeColor(n.type)}33;border-left:3px solid ${typeColor(n.type)};border-radius:10px;padding:.65rem .75rem;margin-bottom:.5rem">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+              <div style="font-size:12px;font-weight:700;color:${typeColor(n.type)}">${n.title}</div>
+              <div style="font-size:10px;color:var(--muted);flex-shrink:0;margin-left:8px">${n.time}</div>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:3px;white-space:pre-line">${n.body}</div>
+          </div>`).join('')}
+      ${_notifHistory.length>0?`<button onclick="_notifHistory.length=0;document.getElementById('notif-modal').remove()" style="width:100%;padding:.6rem;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer;margin-top:4px">🗑️ Futa Yote</button>`:''}
+    </div>`;
+  document.body.appendChild(ov);
+  ov.onclick = e => { if(e.target===ov) ov.remove(); };
+};
+
 function showNotification(title, body, soundType = 'default') {
+  // Store in history + update badge
+  addNotifToHistory(title, body, soundType);
   // Sauti
   playNotificationSound(soundType);
   // Vibration for mobile
@@ -2323,10 +2452,11 @@ function logout(){
 async function updateUser(updates){
   const{data}=await sb.from('users').update(updates).eq('id',currentUser.id).select().single();
   if(data){
-    currentUser=data;
-    localStorage.setItem('njem_session', JSON.stringify(data));
-    const c=el('bankroll-val');if(c)c.textContent='💰 '+fmt(data.bankroll);
+    currentUser={...currentUser,...data};
+    localStorage.setItem('njem_session', JSON.stringify(currentUser));
+    const c=el('bankroll-val');if(c)c.textContent='💰 '+fmt(currentUser.bankroll);
   }
+  return data;
 }
 async function loadData(){
   // Load own mikeka (for stats/reports)
@@ -2456,6 +2586,9 @@ function renderShell(){
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
+        <button onclick="window._showNotifHistory()" style="position:relative;background:none;border:none;cursor:pointer;font-size:18px;padding:0" title="Notifications">
+          🔔<span id="notif-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--danger);color:#fff;border-radius:50%;width:14px;height:14px;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center" id="notif-cnt">0</span>
+        </button>
         ${isOwner?`<div class="bankroll-chip" id="bankroll-val" onclick="window._bk()">💰 ${fmt(currentUser.bankroll)}</div>`:`<div class="bankroll-chip" id="bankroll-val" style="cursor:default">💰 ${fmt(currentUser.bankroll)}</div>`}
         <button class="logout-btn" onclick="window._logout()">⏻</button>
       </div>
@@ -3032,6 +3165,21 @@ async function loadFixMatchesFree(league) {
     }
   }
 
+  // ── Source 1b: football-data.org ────────────────────────────────
+  if (!matches.length && FOOTBALLDATA_KEY) {
+    const fdCode = FOOTBALLDATA_LEAGUE_IDS[league.id];
+    if (fdCode) {
+      try {
+        const data = await footballdataFetch(`competitions/${fdCode}/matches?dateFrom=${fixSelectedDate}&dateTo=${fixSelectedDate}`);
+        if ((data?.matches||[]).length > 0) {
+          const nowMs = Date.now();
+          matches = data.matches.map(m => normaliseFootballData(m, nowMs)).filter(Boolean);
+          srcLabel = '🟠 football-data.org';
+        }
+      } catch(e) { console.warn('fix src1b football-data:', e.message); }
+    }
+  }
+
   // ── Source 2: Sportmonks (free trial — 120 leagues) ──────────────
   if (!matches.length && SPORTMONKS_KEY) {
     const lgId = SPORTMONKS_LEAGUE_IDS[league.id];
@@ -3244,10 +3392,47 @@ function mkCard(m,mini){
   const canCashout=isOwn&&isAnalyst&&m.status==='PENDING';
   const isCashout=m.status==='CASHOUT';
   const statusEmoji=m.status==='WON'?'🟢':m.status==='LOST'?'🔴':m.status==='CASHOUT'?'💵':m.status==='VOID'?'⚪':'🟡';
+
+  // Build per-match rows with live score integration
+  function matchRow(match, i) {
+    const sc2 = findScore(match.teams);
+    const isLive  = sc2?.isLive;
+    const isFT    = sc2?.isFinished;
+    const hg = sc2 ? sc2.home : null;
+    const ag = sc2 ? sc2.away : null;
+    const min = sc2?._estimatedMinute || sc2?.minuteNum || 0;
+    const minDisplay = sc2?.minute || '';
+    const outcomeColor = match.outcome==='WIN'?'var(--win)':match.outcome==='LOSS'?'var(--loss)':match.outcome==='VOID'?'var(--muted)':'var(--warn)';
+    const scoreChip = (isLive||isFT) && hg!==null && ag!==null
+      ? `<span style="background:${isLive?'rgba(255,68,68,.15)':'rgba(0,0,0,.3)'};border:1px solid ${isLive?'rgba(255,68,68,.5)':'rgba(255,255,255,.1)'};border-radius:8px;padding:.15rem .5rem;font-size:12px;font-weight:800;color:${isLive?'var(--danger)':'var(--muted)'};margin-left:4px">${hg} - ${ag}</span>`
+      : '';
+    const minChip = isLive
+      ? `<span style="font-size:9px;color:var(--danger);animation:pulse 1s infinite;font-weight:700;display:inline-block;margin-left:3px">${minDisplay||'LIVE'}</span>`
+      : isFT ? `<span style="font-size:9px;color:var(--muted);font-weight:700;margin-left:3px">FT</span>` : '';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:.45rem 0;${i<matches.length-1?'border-bottom:1px solid #0d1f14':''}">
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:600;display:flex;align-items:center;flex-wrap:wrap;gap:2px">
+          ${lgFlag(match.league)} ${match.teams}${scoreChip}${minChip}
+        </div>
+        <div style="font-size:10px;color:var(--muted)">${lgName(match.league)} · ${match.market} · ${match.pick}</div>
+      </div>
+      <div style="text-align:right;margin-left:8px">
+        <div style="font-size:12px">${match.odds}x</div>
+        <div style="font-size:10px;font-weight:700;color:${outcomeColor};background:${outcomeColor}22;padding:.1rem .4rem;border-radius:6px">${match.outcome||'PENDING'}</div>
+      </div>
+    </div>`;
+  }
+
+  // Count live matches for header badge
+  const liveCount = m.status==='PENDING' ? matches.filter(match=>findScore(match.teams)?.isLive).length : 0;
+  const liveBadge = liveCount>0
+    ? `<span style="background:rgba(255,68,68,.15);border:1px solid rgba(255,68,68,.4);border-radius:12px;padding:.1rem .5rem;font-size:9px;font-weight:700;color:var(--danger);animation:pulse 1.5s infinite;margin-left:6px">🔴 ${liveCount} LIVE</span>`
+    : '';
+
   return`<div style="background:var(--surface);border:1px solid ${isOwn?'rgba(0,255,133,.25)':'var(--border)'};border-radius:16px;margin-bottom:.6rem;overflow:hidden">
     <div data-exp="${m.id}" style="padding:.85rem;cursor:${mini?'default':'pointer'};display:flex;justify-content:space-between;align-items:center">
       <div style="flex:1">
-        <div style="font-weight:600;font-size:13px">${statusEmoji} ${m.name||'Mkeka #'+m.id.slice(-4)}</div>
+        <div style="font-weight:600;font-size:13px;display:flex;align-items:center;flex-wrap:wrap">${statusEmoji} ${m.name||'Mkeka #'+m.id.slice(-4)}${liveBadge}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">
           ${posterName?`👤 <span style="color:${isOwn?'var(--accent)':'var(--muted)'};">${posterName}</span> · `:''}${m.date} · ${matches.length} mechi · TZS ${fmt(m.stake)}
         </div>
@@ -3259,10 +3444,7 @@ function mkCard(m,mini){
       </div>
     </div>
     ${!mini?`<div id="det-${m.id}" style="display:none;border-top:1px solid var(--border);padding:.75rem">
-      ${matches.map((match,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:.45rem 0;${i<matches.length-1?'border-bottom:1px solid #0d1f14':''}">
-        <div><div style="font-size:12px;font-weight:600">${lgFlag(match.league)} ${match.teams}</div><div style="font-size:10px;color:var(--muted)">${lgName(match.league)} · ${match.market} · ${match.pick}</div></div>
-        <div style="text-align:right"><div style="font-size:12px">${match.odds}x</div><div style="font-size:10px;font-weight:700;color:${sc(match.outcome)};background:${sc(match.outcome)}22;padding:.1rem .4rem;border-radius:6px">${match.outcome||'PENDING'}</div></div>
-      </div>`).join('')}
+      ${matches.map((match,i)=>matchRow(match,i)).join('')}
       <div style="margin-top:.75rem;padding:.6rem;background:rgba(0,0,0,.3);border-radius:10px">
         <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:${isCashout?'6px':'0'}">
           <span style="color:var(--muted)">Potential Return:</span><span style="color:var(--accent);font-weight:700">TZS ${fmt(m.potential_return||0)}</span>
@@ -3684,17 +3866,21 @@ function renderResults(c){
       await sb.from('mikeka').update({status:newS}).eq('id',mId);
       const mk=mikeka.find(m=>m.id===mId);
       if(newS==='WON'&&mk){
-        // Rudisha potential_return yote (stake iliishapigwa wakati wa POST)
+        // Always fetch fresh bankroll before crediting
+        const{data:fu}=await sb.from('users').select('bankroll').eq('id',currentUser.id).maybeSingle();
+        const freshBk = fu?.bankroll ?? currentUser.bankroll;
         const payout = mk.potential_return || 0;
-        await updateUser({bankroll: currentUser.bankroll + payout});
+        await updateUser({bankroll: freshBk + payout});
         toast(`🎉 Umeshinda! +TZS ${fmt(payout)} (faida: +TZS ${fmt(payout - (mk.stake||0))})`);
       } else if(newS==='LOST') {
         // Stake tayari ilipigwa — hakuna kubadilisha
         toast('Mkeka umepoteza. Jaribu tena! 💪','warn');
       } else if(newS==='VOID') {
         // VOID: rudisha stake tu
+        const{data:fu2}=await sb.from('users').select('bankroll').eq('id',currentUser.id).maybeSingle();
+        const freshBk2 = fu2?.bankroll ?? currentUser.bankroll;
         const stakeBack = mk?.stake || 0;
-        if(stakeBack > 0) await updateUser({bankroll: currentUser.bankroll + stakeBack});
+        if(stakeBack > 0) await updateUser({bankroll: freshBk2 + stakeBack});
         toast(`⬜ VOID — Stake ya TZS ${fmt(stakeBack)} imerudishwa`,'info');
       }
     }
@@ -3747,7 +3933,7 @@ function renderReports(c){
     userMap[uid].staked+=(m.stake||0);
   });
 
-  const viewTabs=[['overview','Mimi'],['assets','Assets'],['leagues','Ligi'],['markets','Markets'],['trend','Trend'],['ai','AI Tips'],...(isOwner?[['group','Kikundi']]:[])];
+  const viewTabs=[['overview','Mimi'],['assets','Assets'],['leagues','Ligi'],['markets','Markets'],['trend','Trend'],['standings','Standings'],['ai','AI Tips'],...(isOwner?[['group','Kikundi']]:[])];
 
   c.innerHTML=`
     <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:.9rem">📊 Ripoti Zangu</div>
@@ -3888,6 +4074,115 @@ function renderReports(c){
       ${danger.length===0&&best.length===0?'<div class="empty"><div style="font-size:44px">🤖</div><div style="margin-top:8px">Weka mikeka 10+ ili AI ikupe recommendations</div></div>':''}`;
   }
   // GROUP tab - owner/analyst only: per-user performance
+  if(rV==='standings'){
+    // Standings league picker + fetcher
+    const STANDINGS_LEAGUES = [
+      {id:'epl',   name:'Premier League', flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', fd:'PL',   apif:39,  sdb:'4328'},
+      {id:'laliga',name:'La Liga',        flag:'🇪🇸', fd:'PD',   apif:140, sdb:'4335'},
+      {id:'bundesliga',name:'Bundesliga', flag:'🇩🇪', fd:'BL1',  apif:78,  sdb:'4331'},
+      {id:'seriea',name:'Serie A',        flag:'🇮🇹', fd:'SA',   apif:135, sdb:'4332'},
+      {id:'ligue1',name:'Ligue 1',        flag:'🇫🇷', fd:'FL1',  apif:61,  sdb:'4334'},
+      {id:'ucl',   name:'Champions League',flag:'🏆', fd:'CL',   apif:2,   sdb:'4480'},
+      {id:'eredivisie',name:'Eredivisie', flag:'🇳🇱', fd:null,   apif:88,  sdb:'4337'},
+      {id:'primeira',name:'Primeira Liga',flag:'🇵🇹', fd:null,   apif:94,  sdb:'4344'},
+      {id:'championship',name:'Championship',flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', fd:'ELC', apif:40, sdb:'4329'},
+      {id:'superlig',name:'Türk Süper Lig',flag:'🇹🇷', fd:null,  apif:203, sdb:'4342'},
+      {id:'psl',   name:'South Africa PSL',flag:'🇿🇦', fd:null,  apif:288, sdb:'4322'},
+      {id:'egypt', name:'Egyptian Premier',flag:'🇪🇬', fd:null,  apif:233, sdb:'4354'},
+      {id:'npfl',  name:'Nigeria Premier', flag:'🇳🇬', fd:null,  apif:332, sdb:'4388'},
+      {id:'brasileirao',name:'Brasileirão',flag:'🇧🇷', fd:'BSA', apif:71,  sdb:'4351'},
+      {id:'mls',   name:'MLS',            flag:'🇺🇸', fd:null,   apif:253, sdb:'4346'},
+      {id:'jleague',name:'J-League',      flag:'🇯🇵', fd:null,   apif:98,  sdb:'4356'},
+      {id:'saudi', name:'Saudi Pro League',flag:'🇸🇦', fd:null,  apif:307, sdb:'4349'},
+    ];
+    // Use a local state for selected league + data
+    if (!window._standState) window._standState = { lgId: 'epl', data: null, loading: false, season: new Date().getFullYear() };
+    const ss = window._standState;
+    const selLg = STANDINGS_LEAGUES.find(l=>l.id===ss.lgId) || STANDINGS_LEAGUES[0];
+
+    async function loadStandings(lg) {
+      if (ss.loading) return;
+      ss.loading = true; ss.lgId = lg.id; ss.data = null;
+      renderStandingsView();
+      let rows = null;
+      // Source 1: API-Football
+      if (!rows && APISPORTS_KEY) {
+        try {
+          const d = await apifootballFetch(`/standings?league=${lg.apif}&season=${ss.season}`);
+          const st = d?.response?.[0]?.league?.standings?.[0];
+          if (st?.length) {
+            rows = st.map(t=>({pos:t.rank, name:t.team?.name, logo:t.team?.logo,
+              p:t.all?.played, w:t.all?.win, d:t.all?.draw, l:t.all?.lose,
+              gf:t.all?.goals?.for, ga:t.all?.goals?.against, gd:(t.all?.goals?.for||0)-(t.all?.goals?.against||0),
+              pts:t.points, form:t.form||''}));
+          }
+        } catch(e) { console.warn('standings apifootball:', e.message); }
+      }
+      // Source 2: football-data.org
+      if (!rows && FOOTBALLDATA_KEY && lg.fd) {
+        try {
+          const d = await footballdataFetch(`competitions/${lg.fd}/standings`);
+          const st = d?.standings?.find(s=>s.type==='TOTAL')?.table || [];
+          if (st.length) {
+            rows = st.map(t=>({pos:t.position, name:t.team?.name,
+              p:t.playedGames, w:t.won, d:t.draw, l:t.lost,
+              gf:t.goalsFor, ga:t.goalsAgainst, gd:t.goalDifference, pts:t.points, form:''}));
+          }
+        } catch(e) { console.warn('standings footballdata:', e.message); }
+      }
+      // Source 3: TheSportsDB (free, no standings endpoint — show note)
+      ss.data = rows;
+      ss.loading = false;
+      renderStandingsView();
+    }
+
+    function renderStandingsView() {
+      const rc2 = el('rc');
+      if (!rc2) return;
+      const ss2 = window._standState;
+      const selLg2 = STANDINGS_LEAGUES.find(l=>l.id===ss2.lgId) || STANDINGS_LEAGUES[0];
+      rc2.innerHTML = `
+        <div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:6px;margin-bottom:.75rem">
+          ${STANDINGS_LEAGUES.map(l=>`<button onclick="window._standLg('${l.id}')"
+            style="flex-shrink:0;padding:.3rem .65rem;border-radius:20px;border:1.5px solid ${ss2.lgId===l.id?'var(--accent)':'var(--border)'};background:${ss2.lgId===l.id?'rgba(0,255,133,.15)':'transparent'};color:${ss2.lgId===l.id?'var(--accent)':'var(--muted)'};font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
+            ${l.flag} ${l.name}</button>`).join('')}
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
+          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:800">${selLg2.flag} ${selLg2.name} — Jedwali</div>
+          <button onclick="window._standRefresh()" style="padding:.3rem .7rem;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer">🔄 Refresh</button>
+        </div>
+        ${ss2.loading ? '<div class="center"><div class="spinner"></div></div>' :
+          !ss2.data ? `<div style="text-align:center;padding:2rem;color:var(--muted)">
+            <div style="font-size:32px">📊</div>
+            <div style="margin-top:8px;font-size:13px;font-weight:600">Standings Zinahitaji API Key</div>
+            <div style="font-size:11px;margin-top:6px">Weka API-Football au football-data.org key kwenye Admin → API Keys</div>
+            <button onclick="window._standRefresh()" style="margin-top:12px;padding:.5rem 1.2rem;border-radius:10px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;cursor:pointer">🔄 Jaribu Tena</button>
+          </div>` :
+          `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+            <div style="display:grid;grid-template-columns:28px 1fr 24px 24px 24px 24px 32px 36px;gap:2px;padding:.4rem .5rem;background:rgba(0,0,0,.4);font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">
+              <div>#</div><div>Timu</div><div style="text-align:center">P</div><div style="text-align:center">W</div><div style="text-align:center">D</div><div style="text-align:center">L</div><div style="text-align:center">GD</div><div style="text-align:center">Pts</div>
+            </div>
+            ${ss2.data.map((t,i)=>`<div style="display:grid;grid-template-columns:28px 1fr 24px 24px 24px 24px 32px 36px;gap:2px;padding:.45rem .5rem;align-items:center;border-top:${i>0?'1px solid rgba(255,255,255,.04)':'none'};background:${i<4?'rgba(0,255,133,.04)':i===ss2.data.length-3?'rgba(255,68,68,.04)':'transparent'}">
+              <div style="font-size:11px;font-weight:700;color:${i<4?'var(--win)':i>=ss2.data.length-3?'var(--loss)':'var(--muted)'}">${t.pos}</div>
+              <div style="font-size:12px;font-weight:${i<3?'700':'400'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.name}</div>
+              <div style="font-size:11px;text-align:center;color:var(--muted)">${t.p}</div>
+              <div style="font-size:11px;text-align:center;color:var(--win);font-weight:600">${t.w}</div>
+              <div style="font-size:11px;text-align:center;color:var(--warn)">${t.d}</div>
+              <div style="font-size:11px;text-align:center;color:var(--loss)">${t.l}</div>
+              <div style="font-size:11px;text-align:center;color:${(t.gd||0)>=0?'var(--win)':'var(--loss)'};font-weight:600">${(t.gd||0)>=0?'+':''}${t.gd}</div>
+              <div style="font-size:13px;text-align:center;font-weight:800;color:var(--accent)">${t.pts}</div>
+            </div>`).join('')}
+          </div>
+          <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:6px">
+            🟢 UCL zone &nbsp;🔴 Relegation zone
+          </div>`}`;
+      window._standLg = (id) => { window._standState.lgId=id; loadStandings(STANDINGS_LEAGUES.find(l=>l.id===id)||STANDINGS_LEAGUES[0]); };
+      window._standRefresh = () => { loadStandings(STANDINGS_LEAGUES.find(l=>l.id===ss2.lgId)||STANDINGS_LEAGUES[0]); };
+    }
+
+    if (!ss.data && !ss.loading) { loadStandings(selLg); }
+    else { renderStandingsView(); }
+  }
   if(rV==='group'&&isOwner){
     const users=Object.entries(userMap).sort((a,b)=>{
       const wrA=a[1].w+a[1].l>0?a[1].w/(a[1].w+a[1].l):0;
@@ -4010,8 +4305,21 @@ async function renderAdmin(c){
       <input class="inp" id="sportmonks-key" placeholder="Paste Sportmonks API token hapa..." style="margin-bottom:8px" value="${SPORTMONKS_KEY}"/>
       <button onclick="window._saveSportmonks()" class="btn-ghost" style="border-color:var(--win);color:var(--win);margin-bottom:14px">💾 Hifadhi Sportmonks Key</button>
 
+      <!-- football-data.org -->
+      <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:4px">4️⃣ football-data.org — Standings + Top Ligi 🆕</div>
+      <div style="font-size:11px;margin-bottom:6px;color:${FOOTBALLDATA_KEY?'var(--win)':'var(--muted)'}">
+        ${FOOTBALLDATA_KEY?`✅ Imeunganishwa — Top 12 ligi + Standings zipo`:'ℹ️ Haijawekwa — Itasaidia kwa standings na top ligi za Ulaya'}
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:6px;background:rgba(0,0,0,.3);padding:.5rem;border-radius:8px">
+        💡 Free: 10 req/min · EPL, La Liga, Serie A, UCL, Bundesliga, Ligue 1 ✅<br>
+        ✅ Standings zinapatikana bila malipo<br>
+        Pata key: <a href="https://www.football-data.org/client/register" target="_blank" style="color:var(--warn)">football-data.org/client/register</a>
+      </div>
+      <input class="inp" id="footballdata-key" placeholder="Paste football-data.org API key hapa..." style="margin-bottom:8px" value="${FOOTBALLDATA_KEY}"/>
+      <button onclick="window._saveFootballData()" class="btn-ghost" style="border-color:rgba(255,165,0,.6);color:var(--warn);margin-bottom:14px">💾 Hifadhi football-data.org Key</button>
+
       <!-- AllSports -->
-      <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:4px">3️⃣ AllSports API — Backup</div>
+      <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:4px">5️⃣ AllSports API — Backup</div>
       <div style="font-size:11px;margin-bottom:6px;color:${ALLSPORTS_KEY?'var(--win)':'var(--muted)'}">
         ${ALLSPORTS_KEY?`✅ Imeunganishwa — Inafanya kazi kama backup`:'ℹ️ Haijawekwa — Itasaidia kama vyanzo vingine vimekwisha quota'}
       </div>
@@ -4026,6 +4334,7 @@ async function renderAdmin(c){
       <div style="font-size:10px;padding:.5rem;background:rgba(0,0,0,.3);border-radius:8px;margin-top:4px">
         📊 Hali ya vyanzo: 
         <span style="color:${APISPORTS_KEY?'var(--win)':'var(--danger)'}">API-Football ${APISPORTS_KEY?'✅':'❌'}</span> · 
+        <span style="color:${FOOTBALLDATA_KEY?'var(--win)':'var(--muted)'}">football-data ${FOOTBALLDATA_KEY?'✅':'⚪'}</span> · 
         <span style="color:${SPORTMONKS_KEY?'var(--win)':'var(--muted)'}">Sportmonks ${SPORTMONKS_KEY?'✅':'⚪'}</span> · 
         <span style="color:${ALLSPORTS_KEY?'var(--win)':'var(--warn)'}">AllSports ${ALLSPORTS_KEY?'✅':'⚠️'}</span> · 
         <span style="color:var(--win)">TheSportsDB ✅ (free)</span>
@@ -4061,6 +4370,13 @@ async function renderAdmin(c){
     ALLSPORTS_KEY=el('allsports-key')?.value?.trim()||'';
     localStorage.setItem('njem_allsports_key',ALLSPORTS_KEY);
     toast(ALLSPORTS_KEY?`✅ AllSports key imehifadhiwa!`:'Key ni empty','warn');
+    renderAdmin(c);
+  };
+  window._saveFootballData=()=>{
+    FOOTBALLDATA_KEY=el('footballdata-key')?.value?.trim()||'';
+    localStorage.setItem('njem_footballdata_key',FOOTBALLDATA_KEY);
+    toast(FOOTBALLDATA_KEY?`✅ football-data.org key imehifadhiwa!`:'Key ni empty','warn');
+    if(FOOTBALLDATA_KEY) fetchLiveScores();
     renderAdmin(c);
   };
   window._adSettle=async(mkId,newStatus,userId,potReturn,stake)=>{
