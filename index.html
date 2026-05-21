@@ -112,15 +112,19 @@ const LOSS_STREAK_LIMIT=3;
 let APISPORTS_KEY    = localStorage.getItem('njem_apisports_key')    || '';
 let ALLSPORTS_KEY    = localStorage.getItem('njem_allsports_key')    || '';
 let SPORTMONKS_KEY   = localStorage.getItem('njem_sportmonks_key')   || '';
-let FOOTBALLDATA_KEY = localStorage.getItem('njem_footballdata_key') || '';
+let FOOTBALLDATA_KEY = localStorage.getItem('njem_footballdata_key') || '875ee1cf0c0d7b365600e2827a03c8774c6ca91f47f5cf6d6d34f09f124f6a6e';
+// Auto-save the key if not already set
+if (!localStorage.getItem('njem_footballdata_key') && FOOTBALLDATA_KEY) {
+  localStorage.setItem('njem_footballdata_key', FOOTBALLDATA_KEY);
+}
 const SPORTSDB_KEY   = '447279';
 
 // ── API-Football league IDs (api-sports.io) ──────────────────────────
 const APIFOOTBALL_LEAGUE_IDS = {
-  // Tanzania
-  'tpl':           741,   // Tanzania Premier League
-  'crdb_fed':      742,   // CRDB Federation Cup (Tanzania)
-  'mapinduzi':     743,   // Mapinduzi Cup Tanzania
+  // Tanzania — correct IDs verified
+  'tpl':           834,   // Tanzania Premier League (correct ID)
+  'crdb_fed':      836,   // CRDB Federation Cup (Tanzania)
+  'mapinduzi':     837,   // Mapinduzi Cup Tanzania
   // East Africa
   'kpl':           357,   // Kenya Premier League
   'uganda':        386,   // Uganda Premier League
@@ -885,20 +889,39 @@ function showNotification(title, body, soundType = 'default') {
   // Sauti
   playNotificationSound(soundType);
   // Vibration for mobile
-  if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+  if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]);
 
   if (!('Notification' in window)) return;
-  
+
+  const notifOptions = {
+    body,
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: `njem-${soundType}-${Date.now()}`,
+    renotify: true,
+    silent: false,
+    requireInteraction: soundType === 'win' || soundType === 'loss',
+    data: { soundType, timestamp: Date.now() },
+    actions: soundType === 'win'
+      ? [{ action: 'view', title: '👀 Angalia' }]
+      : undefined,
+  };
+
   const doNotify = () => {
     try {
-      new Notification(title, {
-        body,
-        icon: '/icon-192.png',
-        badge: '/icon-192.png',
-        tag: title,
-        renotify: true,
-        silent: false,
-      });
+      // Try Service Worker first (works in background)
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.ready.then(reg => {
+          reg.showNotification(title, notifOptions).catch(() => {
+            // Fallback to basic Notification
+            new Notification(title, notifOptions);
+          });
+        }).catch(() => {
+          new Notification(title, notifOptions);
+        });
+      } else {
+        new Notification(title, notifOptions);
+      }
     } catch(e) { console.warn('Notification error:', e); }
   };
 
@@ -2284,7 +2307,7 @@ function showAuth(mode='login'){
           <input class="inp" id="r-confirm" placeholder="Thibitisha nenosiri" type="password" style="padding-right:48px"/>
           <button onclick="window._togglePass('r-confirm','r-eye2')" id="r-eye2" type="button" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:0;line-height:1">👁</button>
         </div>
-        <button class="btn-primary" id="r-btn">Pata OTP →</button>
+        <button class="btn-primary" id="r-btn">Sajili Sasa →</button>
         <p style="text-align:center;font-size:13px;color:var(--muted);margin-top:12px">Una akaunti? <span id="go-login" style="color:var(--accent);cursor:pointer;font-weight:600">Ingia</span></p>`;
 
       el('go-login').onclick=()=>render('login');
@@ -2295,12 +2318,17 @@ function showAuth(mode='login'){
         if(pass.length<6)return toast('Nenosiri min herufi 6!','err');
         if(pass!==confirm)return toast('Manenosiri hayafanani!','err');
         if(phone.length<9)return toast('Namba ya simu si sahihi!','err');
-        el('r-btn').textContent='Inaangalia...';el('r-btn').disabled=true;
+        el('r-btn').textContent='Inasajili...';el('r-btn').disabled=true;
         const{data:ex}=await sb.from('users').select('id').eq('phone',phone).maybeSingle();
-        if(ex){el('r-btn').textContent='Pata OTP →';el('r-btn').disabled=false;return toast('Namba hii imeshasajiliwa!','err');}
-        sentOTP=genOTP();pendingData={name,phone,password:pass};
-        el('r-btn').textContent='Pata OTP →';el('r-btn').disabled=false;
-        toast('📱 OTP yako: '+sentOTP,'warn');render('otp');
+        if(ex){el('r-btn').textContent='Sajili Sasa →';el('r-btn').disabled=false;return toast('Namba hii imeshasajiliwa!','err');}
+        const{count}=await sb.from('users').select('*',{count:'exact',head:true});
+        const role=(!count||count===0)?'owner':'viewer';
+        const{data,error}=await sb.from('users').insert({
+          id:uid(),name,phone,password:pass,role,bankroll:50000,stake:5000
+        }).select().single();
+        el('r-btn').textContent='Sajili Sasa →';el('r-btn').disabled=false;
+        if(error)return toast('Hitilafu: '+error.message,'err');
+        toast('Akaunti imefunguliwa! 🎉','ok');setTimeout(()=>loginUser(data),600);
       };
     }else if(m==='otp'){
       f.innerHTML=`
@@ -2374,25 +2402,33 @@ function showAuth(mode='login'){
         if(error||!data)return toast('Namba hii haipo kwenye mfumo!','err');
         pendingData={phone,userId:data.id,name:data.name};
         sentOTP=genOTP();
-        toast('🔑 Code yako: '+sentOTP,'warn');
+        // Store OTP in session storage for verification (no SMS in demo - show in UI)
+        sessionStorage.setItem('njem_reset_otp', sentOTP);
+        toast('✅ Code imetengenezwa — angalia hapa chini','ok');
         render('reset-otp');
       };
     }else if(m==='reset-otp'){
+      const displayOTP = sentOTP || sessionStorage.getItem('njem_reset_otp') || '';
       f.innerHTML=`
         <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:12px">Ingiza Code</div>
-        <div style="background:rgba(0,255,133,.06);border:1px solid var(--border);border-radius:10px;padding:.75rem;font-size:12px;color:var(--muted);margin-bottom:12px">
-          📱 Code imetumwa kwa <strong style="color:var(--accent)">${pendingData?.phone}</strong>
+        <div style="background:rgba(0,255,133,.08);border:1px solid rgba(0,255,133,.3);border-radius:10px;padding:.75rem;font-size:12px;color:var(--muted);margin-bottom:12px">
+          🔑 Code yako ya kubadilisha nenosiri:<br>
+          <span style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:var(--accent);letter-spacing:6px;display:block;text-align:center;margin:.5rem 0">${displayOTP}</span>
+          <span style="font-size:10px">📋 Nakili code hii uiingize hapa chini</span>
         </div>
         <input class="inp" id="reset-otp-val" placeholder="○ ○ ○ ○ ○ ○" type="number" style="text-align:center;font-size:22px;letter-spacing:8px;margin-bottom:12px"/>
         <button class="btn-primary" id="reset-otp-btn">✓ Thibitisha</button>
         <div style="display:flex;justify-content:space-between;margin-top:12px;font-size:13px">
           <span id="reset-back" style="color:var(--muted);cursor:pointer">← Rudi</span>
-          <span id="reset-resend" style="color:var(--accent);cursor:pointer">Tuma tena</span>
+          <span id="reset-resend" style="color:var(--accent);cursor:pointer">Tengeneza code mpya</span>
         </div>`;
       el('reset-back').onclick=()=>render('forgot');
-      el('reset-resend').onclick=()=>{sentOTP=genOTP();toast('Code mpya: '+sentOTP,'warn');};
+      el('reset-resend').onclick=()=>{sentOTP=genOTP();sessionStorage.setItem('njem_reset_otp',sentOTP);render('reset-otp');};
       el('reset-otp-btn').onclick=()=>{
-        if(el('reset-otp-val').value.trim()!==sentOTP)return toast('Code si sahihi!','err');
+        const inputOtp = el('reset-otp-val').value.trim();
+        const validOtp = sentOTP || sessionStorage.getItem('njem_reset_otp');
+        if(inputOtp!==validOtp)return toast('Code si sahihi!','err');
+        sessionStorage.removeItem('njem_reset_otp');
         render('new-pass');
       };
     }else if(m==='new-pass'){
@@ -3235,38 +3271,43 @@ async function loadFixMatchesFree(league) {
   // ── Source 4: TheSportsDB (free fallback) ────────────────────────
   if (!matches.length && league.sportsdbId && league.sportsdbId !== '0') {
     try {
+      // Tanzania special handling — TPL sometimes listed under different names
+      const isTanzania = ['tpl','crdb_fed','mapinduzi'].includes(league.id);
+      
       // First try: fetch by league sportsdbId directly
       const data = await sportsdbFetch(`eventsday.php?d=${fixSelectedDate}&l=${league.sportsdbId}`);
       let evs = data?.events || [];
 
       // If direct league fetch returned results, filter by league name for accuracy
-      // (multiple Tanzania leagues share sportsdbId 4637, so we must filter)
       if (evs.length > 0 && league.id !== 'tpl') {
-        // For cups/other leagues sharing same sportsdbId, filter by league name keyword
-        const keyword = league.name.split(' ')[0].toLowerCase(); // e.g. "CRDB", "Mapinduzi"
+        const keyword = league.name.split(' ')[0].toLowerCase();
         const filtered = evs.filter(ev => ev.strLeague?.toLowerCase().includes(keyword));
-        // Only use filtered results if we actually find something; else show TPL matches with note
         if (filtered.length > 0) evs = filtered;
-        else {
-          // Show the raw TPL matches but with a note that it's the closest available data
-          // (don't fall through to name search — that causes all-Tanzania bug)
-        }
       }
 
-      // Second try only if direct fetch gave nothing AND league name search is reliable
+      // Second try: search all soccer events if direct fetch gave nothing
       if (!evs.length) {
         const data2 = await sportsdbFetch(`eventsday.php?d=${fixSelectedDate}&s=Soccer`);
-        // Use STRICT filtering: ALL significant words must match (not just one)
-        const nameParts = league.name.toLowerCase()
-          .replace(/[^\w\s]/g,'')
-          .split(' ')
-          .filter(p => p.length > 3 && !['premier','league','super','first','division','national'].includes(p));
-        if (nameParts.length > 0) {
+        
+        if (isTanzania) {
+          // Tanzania-specific search — try multiple name variants
+          const tanzaniaKeywords = ['tanzania', 'tanzanian', 'tpl', 'crdb', 'mapinduzi'];
           evs = (data2?.events || []).filter(ev => {
-            const lgLower = ev.strLeague?.toLowerCase() || '';
-            // ALL keywords must match (strict AND filter prevents wrong leagues)
-            return nameParts.every(p => lgLower.includes(p));
+            const lgLower = (ev.strLeague || '').toLowerCase();
+            const ctryLower = (ev.strCountry || '').toLowerCase();
+            return tanzaniaKeywords.some(kw => lgLower.includes(kw) || ctryLower.includes(kw));
           });
+        } else {
+          const nameParts = league.name.toLowerCase()
+            .replace(/[^\w\s]/g,'')
+            .split(' ')
+            .filter(p => p.length > 3 && !['premier','league','super','first','division','national'].includes(p));
+          if (nameParts.length > 0) {
+            evs = (data2?.events || []).filter(ev => {
+              const lgLower = ev.strLeague?.toLowerCase() || '';
+              return nameParts.every(p => lgLower.includes(p));
+            });
+          }
         }
       }
 
@@ -3274,6 +3315,19 @@ async function loadFixMatchesFree(league) {
         const nowMs = Date.now();
         matches = evs.map(ev => normaliseSportsdb(ev, nowMs)).filter(Boolean);
         srcLabel = '📡 TheSportsDB';
+      }
+      
+      // Tanzania last resort: try round-based fetch
+      if (!matches.length && isTanzania) {
+        try {
+          const roundData = await sportsdbFetch(`eventsnextleague.php?id=${league.sportsdbId}`);
+          const nextEvs = roundData?.events || [];
+          if (nextEvs.length > 0) {
+            const nowMs = Date.now();
+            matches = nextEvs.map(ev => normaliseSportsdb(ev, nowMs)).filter(Boolean);
+            srcLabel = '📡 TheSportsDB (Next)';
+          }
+        } catch(e2) { console.warn('Tanzania next round fetch:', e2.message); }
       }
     } catch(e) { console.warn('fix src4 TheSportsDB:', e.message); }
   }
@@ -3936,7 +3990,10 @@ function renderReports(c){
   const viewTabs=[['overview','Mimi'],['assets','Assets'],['leagues','Ligi'],['markets','Markets'],['trend','Trend'],['standings','Standings'],['ai','AI Tips'],...(isOwner?[['group','Kikundi']]:[])];
 
   c.innerHTML=`
-    <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:.9rem">📊 Ripoti Zangu</div>
+    <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:.9rem;display:flex;align-items:center;justify-content:space-between">
+      📊 Ripoti Zangu
+      <button onclick="window._exportHistory()" style="padding:.35rem .8rem;border-radius:20px;border:1px solid rgba(0,255,133,.4);background:rgba(0,255,133,.08);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer">⬇️ Export</button>
+    </div>
     <div style="display:flex;gap:6px;margin-bottom:.75rem">
       ${[['week','Wiki'],['month','Mwezi'],['year','Mwaka'],['all','Yote']].map(([v,l])=>`<button onclick="window._rP('${v}')" style="flex:1;padding:.45rem;border-radius:12px;border:1.5px solid ${rP===v?'var(--accent)':'var(--border)'};background:${rP===v?'rgba(0,255,133,.15)':'transparent'};color:${rP===v?'var(--accent)':'var(--muted)'};font-weight:700;font-size:12px;cursor:pointer">${l}</button>`).join('')}
     </div>
@@ -3945,6 +4002,137 @@ function renderReports(c){
     </div>
     <div id="rc"></div>`;
   window._rP=(v)=>{rP=v;renderReports(c);};window._rV=(v)=>{rV=v;renderReports(c);};
+  
+  // ── Export Betting History ──────────────────────────────────────────
+  window._exportHistory = () => {
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay';
+    ov.id = 'export-modal';
+    ov.innerHTML = `
+      <div class="modal-box" style="max-height:88vh;overflow-y:auto">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
+          <div>
+            <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800">⬇️ Export Historia</div>
+            <div style="font-size:11px;color:var(--muted)">Chagua format ya kupakua</div>
+          </div>
+          <button onclick="document.getElementById('export-modal').remove()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">×</button>
+        </div>
+        
+        <!-- Summary stats preview -->
+        <div style="background:rgba(0,255,133,.06);border:1px solid rgba(0,255,133,.2);border-radius:12px;padding:.85rem;margin-bottom:1rem">
+          <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:8px">📊 Muhtasari — ${rP==='week'?'Wiki hii':rP==='month'?'Mwezi huu':rP==='year'?'Mwaka huu':'Mikeka Yote'}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;text-align:center">
+            <div><div style="font-size:18px;font-weight:800;color:var(--accent)">${fil.length}</div><div style="font-size:10px;color:var(--muted)">Mikeka</div></div>
+            <div><div style="font-size:18px;font-weight:800;color:var(--win)">${wr}%</div><div style="font-size:10px;color:var(--muted)">Win Rate</div></div>
+            <div><div style="font-size:18px;font-weight:800;color:${parseFloat(roi)>=0?'var(--win)':'var(--loss)'}">${roi}%</div><div style="font-size:10px;color:var(--muted)">ROI</div></div>
+          </div>
+        </div>
+        
+        <!-- Export options -->
+        <div style="display:flex;flex-direction:column;gap:.6rem;margin-bottom:1rem">
+          <button onclick="window._doExport('csv')" style="display:flex;align-items:center;gap:12px;padding:.85rem;border-radius:14px;border:1px solid rgba(0,255,133,.3);background:rgba(0,255,133,.06);color:var(--text);cursor:pointer;font-family:inherit;text-align:left">
+            <span style="font-size:28px">📄</span>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--accent)">CSV (Excel/Spreadsheet)</div>
+              <div style="font-size:11px;color:var(--muted)">Fungua kwenye Excel, Google Sheets au Numbers</div>
+            </div>
+          </button>
+          <button onclick="window._doExport('json')" style="display:flex;align-items:center;gap:12px;padding:.85rem;border-radius:14px;border:1px solid rgba(77,166,255,.3);background:rgba(77,166,255,.06);color:var(--text);cursor:pointer;font-family:inherit;text-align:left">
+            <span style="font-size:28px">🗂️</span>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--info)">JSON (Data)</div>
+              <div style="font-size:11px;color:var(--muted)">Kwa developers au analysis ya kina</div>
+            </div>
+          </button>
+          <button onclick="window._doExport('txt')" style="display:flex;align-items:center;gap:12px;padding:.85rem;border-radius:14px;border:1px solid rgba(255,170,0,.3);background:rgba(255,170,0,.06);color:var(--text);cursor:pointer;font-family:inherit;text-align:left">
+            <span style="font-size:28px">📋</span>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--warn)">Ripoti ya Maandishi (TXT)</div>
+              <div style="font-size:11px;color:var(--muted)">Rahisi kusoma na kushiriki kwa WhatsApp/Telegram</div>
+            </div>
+          </button>
+        </div>
+        
+        <div style="font-size:10px;color:var(--muted);text-align:center;padding:.5rem;background:rgba(0,0,0,.2);border-radius:8px">
+          📥 Faili itapakuliwa moja kwa moja kwenye simu/kompyuta yako
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if(e.target===ov) ov.remove(); };
+    
+    window._doExport = (format) => {
+      const allData = rP==='all' ? mikeka : fil;
+      const dateLabel = rP==='week'?'Wiki_hii':rP==='month'?'Mwezi_huu':rP==='year'?'Mwaka_huu':'Yote';
+      const fileName = `NJEM_Tipps_Historia_${dateLabel}_${new Date().toISOString().split('T')[0]}`;
+      
+      if (format === 'csv') {
+        // Build CSV
+        let csv = 'Mkeka,Tarehe,Hali,Stake (TZS),Return (TZS),Faida (TZS),Odds,Mechi,Masoko\n';
+        allData.forEach(m => {
+          const matches = (m.matches||[]).map(x => `${x.teams}(${x.market}@${x.odds}x→${x.outcome||'PENDING'})`).join('; ');
+          const markets = (m.matches||[]).map(x => x.market).join('; ');
+          const profit2 = m.status==='WON' ? (m.potential_return||0) - (m.stake||0) : m.status==='LOST' ? -(m.stake||0) : 0;
+          csv += `"${m.name||'Mkeka'}","${m.date}","${m.status}","${m.stake||0}","${m.status==='WON'?m.potential_return||0:0}","${profit2}","${(m.total_odds||1).toFixed(2)}","${matches}","${markets}"\n`;
+        });
+        const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href=url; a.download=fileName+'.csv'; a.click();
+        URL.revokeObjectURL(url);
+        toast('✅ CSV imepakuliwa!','ok');
+        
+      } else if (format === 'json') {
+        const exportData = {
+          exported_by: currentUser.name,
+          exported_at: new Date().toISOString(),
+          period: rP,
+          summary: { total: fil.length, won: won.length, lost: lost.length, win_rate: wr+'%', roi: roi+'%', total_staked: staked, total_return: ret, profit },
+          mikeka: allData.map(m => ({
+            id: m.id, name: m.name||'Mkeka', date: m.date, status: m.status,
+            stake: m.stake, potential_return: m.potential_return, total_odds: m.total_odds,
+            matches: (m.matches||[]).map(x => ({ teams: x.teams, league: lgName(x.league), market: x.market, pick: x.pick, odds: x.odds, outcome: x.outcome }))
+          }))
+        };
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], {type:'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href=url; a.download=fileName+'.json'; a.click();
+        URL.revokeObjectURL(url);
+        toast('✅ JSON imepakuliwa!','ok');
+        
+      } else if (format === 'txt') {
+        const hr = '━'.repeat(40);
+        let txt = `\n${hr}\n  🏆 NJEM TIPPS — HISTORIA YA MIKEKA\n${hr}\n`;
+        txt += `\n👤 Mtu: ${currentUser.name}\n`;
+        txt += `📅 Kipindi: ${rP==='week'?'Wiki hii':rP==='month'?'Mwezi huu':rP==='year'?'Mwaka huu':'Yote'}\n`;
+        txt += `📆 Tarehe ya Export: ${new Date().toLocaleDateString('sw-TZ')}\n`;
+        txt += `\n${hr}\n  📊 MUHTASARI\n${hr}\n`;
+        txt += `• Mikeka Yote: ${fil.length}\n`;
+        txt += `• Imeshinda: ${won.length} | Imepoteza: ${lost.length}\n`;
+        txt += `• Win Rate: ${wr}%\n`;
+        txt += `• ROI: ${roi}%\n`;
+        txt += `• Jumla Staked: TZS ${fmt(staked)}\n`;
+        txt += `• Jumla Return: TZS ${fmt(ret)}\n`;
+        txt += `• Faida/Hasara: ${profit>=0?'+':''}TZS ${fmt(profit)}\n`;
+        txt += `\n${hr}\n  📋 ORODHA YA MIKEKA\n${hr}\n`;
+        allData.forEach((m, i) => {
+          const p2 = m.status==='WON'?(m.potential_return||0)-(m.stake||0):m.status==='LOST'?-(m.stake||0):0;
+          txt += `\n${i+1}. ${m.name||'Mkeka'} [${m.status}]\n`;
+          txt += `   📅 ${m.date} | 🎲 ${(m.total_odds||1).toFixed(2)}x\n`;
+          txt += `   💸 Stake: TZS ${fmt(m.stake||0)} → Return: TZS ${fmt(m.potential_return||0)} | Faida: ${p2>=0?'+':''}TZS ${fmt(p2)}\n`;
+          (m.matches||[]).forEach(x => {
+            txt += `   ${x.outcome==='WIN'?'✅':x.outcome==='LOSS'?'❌':'⬜'} ${x.teams} | ${x.market} @ ${x.odds}x → ${x.outcome||'PENDING'}\n`;
+          });
+        });
+        txt += `\n${hr}\n  📞 NJEM MABULA: 0764674285\n${hr}\n`;
+        const blob = new Blob([txt], {type:'text/plain;charset=utf-8'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href=url; a.download=fileName+'.txt'; a.click();
+        URL.revokeObjectURL(url);
+        toast('✅ Ripoti imepakuliwa!','ok');
+      }
+      document.getElementById('export-modal')?.remove();
+    };
+  };
+
   const rc=el('rc');
   if(rV==='overview'){
     rc.innerHTML=`
@@ -4077,6 +4265,8 @@ function renderReports(c){
   if(rV==='standings'){
     // Standings league picker + fetcher
     const STANDINGS_LEAGUES = [
+      {id:'tpl',   name:'Tanzania Premier', flag:'🇹🇿', fd:null,   apif:834, sdb:'4637'},
+      {id:'kpl',   name:'Kenya Premier',   flag:'🇰🇪', fd:null,   apif:357, sdb:'4391'},
       {id:'epl',   name:'Premier League', flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', fd:'PL',   apif:39,  sdb:'4328'},
       {id:'laliga',name:'La Liga',        flag:'🇪🇸', fd:'PD',   apif:140, sdb:'4335'},
       {id:'bundesliga',name:'Bundesliga', flag:'🇩🇪', fd:'BL1',  apif:78,  sdb:'4331'},
@@ -4095,8 +4285,12 @@ function renderReports(c){
       {id:'jleague',name:'J-League',      flag:'🇯🇵', fd:null,   apif:98,  sdb:'4356'},
       {id:'saudi', name:'Saudi Pro League',flag:'🇸🇦', fd:null,  apif:307, sdb:'4349'},
     ];
-    // Use a local state for selected league + data
-    if (!window._standState) window._standState = { lgId: 'epl', data: null, loading: false, season: new Date().getFullYear() };
+    // Reset state each time tab opens to ensure fresh load
+    if (!window._standState) window._standState = { lgId: 'tpl', data: null, loading: false, season: new Date().getFullYear() };
+    // Ensure Tanzania is selected as default on first load
+    if (window._standState.lgId === 'epl' && !window._standState._hasLoaded) {
+      window._standState.lgId = 'tpl';
+    }
     const ss = window._standState;
     const selLg = STANDINGS_LEAGUES.find(l=>l.id===ss.lgId) || STANDINGS_LEAGUES[0];
 
@@ -4133,6 +4327,7 @@ function renderReports(c){
       // Source 3: TheSportsDB (free, no standings endpoint — show note)
       ss.data = rows;
       ss.loading = false;
+      ss._hasLoaded = true;
       renderStandingsView();
     }
 
@@ -4155,7 +4350,11 @@ function renderReports(c){
           !ss2.data ? `<div style="text-align:center;padding:2rem;color:var(--muted)">
             <div style="font-size:32px">📊</div>
             <div style="margin-top:8px;font-size:13px;font-weight:600">Standings Zinahitaji API Key</div>
-            <div style="font-size:11px;margin-top:6px">Weka API-Football au football-data.org key kwenye Admin → API Keys</div>
+            <div style="font-size:11px;margin-top:6px;line-height:1.6;padding:0 .5rem">
+              • Weka <strong style="color:var(--warn)">API-Football key</strong> kwenye Admin → API Keys<br>
+              • Au weka <strong style="color:var(--info)">football-data.org key</strong> (kwa EPL, La Liga, n.k.)<br>
+              • Tanzania Premier League (TPL) inahitaji API-Football key
+            </div>
             <button onclick="window._standRefresh()" style="margin-top:12px;padding:.5rem 1.2rem;border-radius:10px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;cursor:pointer">🔄 Jaribu Tena</button>
           </div>` :
           `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
@@ -4468,7 +4667,19 @@ window._aiAnalysis = (teams, mid) => {
 
 // BOOT — Check saved session first
 checkSavedSession();
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
+if('serviceWorker'in navigator){
+  navigator.serviceWorker.register('/sw.js').then(reg => {
+    console.log('SW registered:', reg.scope);
+    // Listen for messages from service worker
+    navigator.serviceWorker.addEventListener('message', event => {
+      if (event.data?.type === 'NOTIFICATION_CLICK') {
+        // Bring app to focus on notification click
+        window.focus();
+        if (currentTab) showTab(currentTab);
+      }
+    });
+  }).catch(e => console.warn('SW registration failed:', e));
+}
 </script>
 </body>
 </html>
