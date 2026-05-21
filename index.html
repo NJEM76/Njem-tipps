@@ -393,14 +393,22 @@ async function apiSports(endpoint)      { return apifootballFetch(endpoint); }
 // ── 2. AllSports API ─────────────────────────────────────────────────
 async function allsportsFetch(endpoint) {
   if (!ALLSPORTS_KEY) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
   try {
     const base = 'https://apiv2.allsportsapi.com/football/';
     const sep  = endpoint.includes('?') ? '&' : '?';
     const url  = `${base}${endpoint}${sep}APIkey=${ALLSPORTS_KEY}`;
-    const res  = await fetch(url);
+    const res  = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
     if (!res.ok) { console.warn('AllSports HTTP', res.status); return null; }
     return await res.json();
-  } catch(e) { console.warn('AllSports exception:', e.message); return null; }
+  } catch(e) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') console.warn('AllSports timeout — request ilikuwa polepole sana');
+    else console.warn('AllSports exception:', e.message);
+    return null;
+  }
 }
 
 // ── 3. Sportmonks API ────────────────────────────────────────────────
@@ -619,7 +627,7 @@ async function fetchLiveScores() {
   // ── Source 3: Sportmonks ──────────────────────────────────────────
   if (SPORTMONKS_KEY) {
     try {
-      const smRes = await sportmonksFetch(`fixtures/date/${todayStr}?include=participants;scores;state;league`);
+      const smRes = await sportmonksFetch(`fixtures/date/${todayStr}?include=participants,scores,state,league`);
       const nowMs2 = Date.now();
       (smRes?.data || []).forEach(fix => ingestScoreData(normaliseSportmonks(fix, nowMs2)));
     } catch(e) { console.warn('Sportmonks live fetch:', e.message); }
@@ -657,25 +665,47 @@ async function fetchLiveScores() {
   if (currentTab === 'fixtures') renderFixtures(el('content'));
 }
 
-// Find score for a match by team names — improved fuzzy matching
-function findScore(teamsStr) {
+// Find score for a match by team names — improved fuzzy matching with fixtureId support
+function findScore(teamsStr, fixtureId = null) {
   if (!teamsStr) return null;
   const key = teamsStr.toLowerCase().trim();
+
   // 1. Direct exact match
   if (liveScores[key]) return liveScores[key];
+
+  // 2. Ikiwa fixtureId imetolewa, tafuta kwa ID moja kwa moja
+  if (fixtureId) {
+    for (const [k, v] of Object.entries(liveScores)) {
+      if (v.fixtureId == fixtureId) return v;
+    }
+  }
 
   const parts = key.split(' vs ');
   if (parts.length !== 2) return null;
   const home = parts[0].trim();
   const away = parts[1].trim();
 
-  // 2. Partial name match — check if stored key contains BOTH team name fragments
+  // 3. Prefix match — angalau herufi 4 za mwanzo zilingane
+  const homePrefix = home.slice(0, 4);
+  const awayPrefix = away.slice(0, 4);
+  for (const [k, v] of Object.entries(liveScores)) {
+    const kLower = k.toLowerCase();
+    const kParts = kLower.split(' vs ');
+    if (kParts.length !== 2) continue;
+    const kHome = kParts[0].trim();
+    const kAway = kParts[1].trim();
+    if (
+      (kHome.startsWith(homePrefix) || home.startsWith(kHome.slice(0,4))) &&
+      (kAway.startsWith(awayPrefix) || away.startsWith(kAway.slice(0,4)))
+    ) return v;
+  }
+
+  // 4. Partial name match — check if stored key contains BOTH team name fragments
   for (const [k, v] of Object.entries(liveScores)) {
     const kParts = k.split(' vs ');
     if (kParts.length !== 2) continue;
     const kHome = kParts[0].trim();
     const kAway = kParts[1].trim();
-    // Match if first 4+ chars of team name match (handles abbreviated names)
     const homeSlug = home.slice(0, 5);
     const awaySlug = away.slice(0, 5);
     if (
@@ -684,7 +714,7 @@ function findScore(teamsStr) {
     ) return v;
   }
 
-  // 3. Looser — at least one team matches strongly
+  // 5. Looser — at least one team matches strongly
   for (const [k, v] of Object.entries(liveScores)) {
     if (k.includes(home.slice(0,6)) || k.includes(away.slice(0,6))) return v;
   }
@@ -698,6 +728,10 @@ async function autoSettleMatches() {
   const pendingMikeka = mikeka.filter(m => m.status === 'PENDING');
   
   for (const mk of pendingMikeka) {
+    // ── Kinga ya double-settle: angalia status ya sasa kutoka DB ────────
+    const { data: mkFresh } = await sb.from('mikeka').select('status').eq('id', mk.id).maybeSingle();
+    if (mkFresh?.status !== 'PENDING') continue; // tayari imesettled na mtu mwingine
+
     const matches = mk.matches || [];
     let needsUpdate = false;
     
@@ -816,6 +850,7 @@ function determineOutcome(match, score) {
 // ── Audio alert using Web Audio API (sauti ya notification) ──────────
 function playNotificationSound(type = 'default') {
   try {
+    // Unda AudioContext mpya kila wakati — salama zaidi kwa iOS
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const sequences = {
       win:     [{f:523,t:0,d:.12},{f:659,t:.13,d:.12},{f:784,t:.26,d:.2}],
@@ -824,18 +859,21 @@ function playNotificationSound(type = 'default') {
       default: [{f:520,t:0,d:.1},{f:660,t:.12,d:.1}],
     };
     const seq = sequences[type] || sequences.default;
-    seq.forEach(({f, t, d}) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.frequency.value = f;
-      osc.type = 'sine';
-      gain.gain.setValueAtTime(0.35, ctx.currentTime + t);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + d);
-      osc.start(ctx.currentTime + t);
-      osc.stop(ctx.currentTime + t + d + 0.05);
+    // ctx.resume() ni muhimu sana kwa iOS — lazima iitwe kabla ya kucheza sauti
+    ctx.resume().then(() => {
+      seq.forEach(({f, t, d}) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = f;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.35, ctx.currentTime + t);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + d);
+        osc.start(ctx.currentTime + t);
+        osc.stop(ctx.currentTime + t + d + 0.05);
+      });
+      setTimeout(() => ctx.close(), 1500);
     });
-    setTimeout(() => ctx.close(), 1500);
   } catch(e) { /* AudioContext inaweza kuzuiwa kabla ya user interaction */ }
 }
 
@@ -2116,6 +2154,8 @@ function startLiveScores() {
         const elapsedMins = Math.floor((now - s.fetchedAt) / 60000);
         const cap = s.minuteNum <= 45 ? 47 : 95; // allow stoppage time
         s._estimatedMinute = Math.min(s.minuteNum + elapsedMins, cap);
+      } else {
+        s._estimatedMinute = s.minuteNum || 0;
       }
       // Mark stale if: estimated min >= 93 AND > 5 min since last fetch (was 15min — too long!)
       // OR if > 120 minutes since fetch (match definitely over)
@@ -2784,6 +2824,9 @@ function renderLiveSection() {
       </div>
       <div class="center"><div class="spinner"></div></div>
       <div style="text-align:center;font-size:11px;color:var(--muted);margin-top:6px">Inafetch data kutoka TheSportsDB...</div>`;
+    if (!APISPORTS_KEY && !SPORTMONKS_KEY && !ALLSPORTS_KEY) {
+      sec.innerHTML += `<div class="banner-warn" style="margin-top:8px;border-radius:8px">⚠️ Unatumia TheSportsDB bure — live scores zinaweza kuchelewa hadi dakika 30. Weka API-Football key kwa matokeo ya wakati halisi.</div>`;
+    }
     if (!liveInterval) fetchLiveScores();
     return;
   }
@@ -2805,7 +2848,8 @@ function renderLiveSection() {
         <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Hamna Live Match Kwa Sasa</div>
         <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Hakuna mechi za live au zinazokuja leo zinazojulikana. Jaribu baadaye au angalia Fixtures.</div>
         <button onclick="window._showFixtures()" style="padding:.55rem 1.2rem;border-radius:20px;border:1.5px solid var(--accent);background:rgba(0,255,133,.08);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">📅 Angalia Fixtures →</button>
-      </div>`;
+      </div>
+      ${(!APISPORTS_KEY && !SPORTMONKS_KEY && !ALLSPORTS_KEY) ? `<div class="banner-warn" style="margin-top:8px;border-radius:8px">⚠️ Unatumia TheSportsDB bure — live scores zinaweza kuchelewa hadi dakika 30. Weka API-Football key kwa matokeo ya wakati halisi.</div>` : ''}`;
     return;
   }
 
@@ -2823,9 +2867,7 @@ function renderLiveSection() {
   const matchCard = (s) => {
     const displayMin = s.isLive 
       ? (s.status === 'HT' ? '⏸ HT' 
-        : s._estimatedMinute 
-          ? `~${s._estimatedMinute}'` 
-          : s.minute || 'LIVE')
+        : (s._estimatedMinute !== undefined ? `~${s._estimatedMinute}'` : (s.minute || 'LIVE')))
       : '';
     const safeHome = (s.homeTeam||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
     const safeAway = (s.awayTeam||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
@@ -3838,12 +3880,19 @@ function renderPost(c){
     const potRet=Math.round(tOdds*stake);
     const mId=uid();
     const btn=el('post-btn');btn.textContent='Inasave...';btn.disabled=true;
+    // ── KWANZA: ingiza mkeka ──────────────────────────────────────────
     const{error:e1}=await sb.from('mikeka').insert({id:mId,user_id:currentUser.id,name,date,stake,total_odds:tOdds,potential_return:potRet,analysis:ana,status:'PENDING'});
     if(e1){btn.textContent='📤 Post Mkeka';btn.disabled=false;return toast('Hitilafu: '+e1.message,'err');}
+    // ── PILI: ingiza matches ──────────────────────────────────────────
     const{error:e2}=await sb.from('matches').insert(pMatches.map(m=>({id:uid(),mkeka_id:mId,teams:m.teams,league:m.league,market:m.market,pick:m.pick,odds:parseFloat(m.odds),outcome:'PENDING'})));
+    if(e2){
+      // Rollback — futa mkeka iliyoingizwa
+      await sb.from('mikeka').delete().eq('id',mId);
+      btn.textContent='📤 Post Mkeka';btn.disabled=false;
+      return toast('Hitilafu ya mechi: '+e2.message,'err');
+    }
     btn.textContent='📤 Post Mkeka';btn.disabled=false;
-    if(e2)return toast('Hitilafu ya mechi: '+e2.message,'err');
-    // ── Punguza stake kutoka bankroll mara moja mkeka ukiwekwa ──
+    // ── TATU: toa stake (baada ya mikeka na matches zote kufaulu) ─────
     const newBk = currentUser.bankroll - stake;
     await updateUser({ bankroll: newBk });
     toast(`Mkeka umewekwa! 🎯 Stake -TZS ${fmt(stake)}`);
@@ -4076,7 +4125,8 @@ function renderReports(c){
         });
         const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href=url; a.download=fileName+'.csv'; a.click();
+        const a = document.createElement('a'); a.href=url; a.download=fileName+'.csv';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
         URL.revokeObjectURL(url);
         toast('✅ CSV imepakuliwa!','ok');
         
@@ -4094,7 +4144,8 @@ function renderReports(c){
         };
         const blob = new Blob([JSON.stringify(exportData, null, 2)], {type:'application/json'});
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href=url; a.download=fileName+'.json'; a.click();
+        const a = document.createElement('a'); a.href=url; a.download=fileName+'.json';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
         URL.revokeObjectURL(url);
         toast('✅ JSON imepakuliwa!','ok');
         
@@ -4125,7 +4176,8 @@ function renderReports(c){
         txt += `\n${hr}\n  📞 NJEM MABULA: 0764674285\n${hr}\n`;
         const blob = new Blob([txt], {type:'text/plain;charset=utf-8'});
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href=url; a.download=fileName+'.txt'; a.click();
+        const a = document.createElement('a'); a.href=url; a.download=fileName+'.txt';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
         URL.revokeObjectURL(url);
         toast('✅ Ripoti imepakuliwa!','ok');
       }
@@ -4667,19 +4719,19 @@ window._aiAnalysis = (teams, mid) => {
 
 // BOOT — Check saved session first
 checkSavedSession();
-if('serviceWorker'in navigator){
-  navigator.serviceWorker.register('/sw.js').then(reg => {
-    console.log('SW registered:', reg.scope);
-    // Listen for messages from service worker
-    navigator.serviceWorker.addEventListener('message', event => {
-      if (event.data?.type === 'NOTIFICATION_CLICK') {
-        // Bring app to focus on notification click
-        window.focus();
-        if (currentTab) showTab(currentTab);
-      }
-    });
-  }).catch(e => console.warn('SW registration failed:', e));
-}
+// Service worker — imeondolewa kwa muda mpaka sw.js itakapoundwa
+// Uncomment hii ukishaunda sw.js kwenye root ya server:
+// if('serviceWorker'in navigator){
+//   navigator.serviceWorker.register('/sw.js').then(reg => {
+//     console.log('SW registered:', reg.scope);
+//     navigator.serviceWorker.addEventListener('message', event => {
+//       if (event.data?.type === 'NOTIFICATION_CLICK') {
+//         window.focus();
+//         if (currentTab) showTab(currentTab);
+//       }
+//     });
+//   }).catch(e => console.warn('SW registration failed:', e));
+// }
 </script>
 </body>
 </html>
