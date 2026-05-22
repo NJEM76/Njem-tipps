@@ -198,6 +198,21 @@ const APIFOOTBALL_LEAGUE_IDS = {
   'saudi':         307,
   'uae':           435,
   'qatar':         3001,
+  'bahrain':       973,    // Bahrain Premier League
+  'azerbaijan':    529,    // Azerbaycan Premyer Liqasi
+  'kazakhstan':    391,    // Kazakhstan Premier League
+  'uzbekistan':    687,    // Uzbekistan Super League
+  'armenia':       383,    // Armenian Premier League
+  'georgia':       632,    // Georgian Erovnuli Liga
+  'israel':        307,    // Ligat Ha'Al Israel
+  'finland':       244,    // Veikkausliiga
+  'slovakia':      332,    // Slovak Superliga
+  'hungary':       271,    // OTP Bank Liga
+  'bulgaria':      270,    // efbet Liga
+  'slovenia':      215,    // PrvaLiga Slovenia
+  'iceland':       164,    // Úrvalsdeild
+  'cyprus':        262,    // 1. Division Cyprus
+  'albania':       390,    // Kategoria Superiore
   // International
   'worldcup':      1,
   'wcq_africa':    29,
@@ -468,11 +483,18 @@ function normaliseSportmonks(fix, nowMs) {
 
 // ── 4. TheSportsDB (free, no key needed) ─────────────────────────────
 async function sportsdbFetch(path) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
   try {
-    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/${path}`);
+    const res = await fetch(`https://www.thesportsdb.com/api/v1/json/${SPORTSDB_KEY}/${path}`, { signal: controller.signal });
+    clearTimeout(timeout);
     if (!res.ok) return null;
     return await res.json();
-  } catch(e) { return null; }
+  } catch(e) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') console.warn('TheSportsDB timeout');
+    return null;
+  }
 }
 
 // ── Normalise a fixture from any source into a common scoreData object ─
@@ -540,17 +562,17 @@ function normaliseSportsdb(ev, nowMs) {
                     || st.startsWith('FT') || st.startsWith('AET');
   let minuteDisplay = '', minuteNum = 0;
   if (st === 'HT') { minuteDisplay = 'HT'; minuteNum = 45; }
-  else if (isLive && ev.strProgress) {
-    const prog = ev.strProgress.toString().trim();
-    minuteNum = parseInt(prog.split('+')[0]) || 0;
-    minuteDisplay = prog + "'";
+  else if (isLive && ev.strProgress != null) {
+    const prog = (ev.strProgress?.toString() || '').trim();
+    if (prog) { minuteNum = parseInt(prog.split('+')[0]) || 0; minuteDisplay = prog + "'"; }
+    else { minuteDisplay = 'LIVE'; }
   } else if (isLive) { minuteDisplay = 'LIVE'; }
   else if (isFinished) { minuteDisplay = 'FT'; }
   const today = new Date().toISOString().split('T')[0];
 
   // TheSportsDB returns time in UTC — convert to EAT (UTC+3) for Tanzania users
   let timeStr = '';
-  if (ev.strTime) {
+  if (ev.strTime && typeof ev.strTime === 'string' && ev.strTime.length >= 5) {
     try {
       const rawTime = ev.strTime.slice(0, 5); // "HH:MM"
       const [hh, mm] = rawTime.split(':').map(Number);
@@ -658,7 +680,17 @@ async function fetchLiveScores() {
 
   lastLiveFetch = Date.now();
   liveDataFetchedOnce = true;
-  await autoSettleMatches();
+
+  // ── Cleanup: futa mechi ambazo zimekwisha na zimepita zaidi ya saa 2 ──
+  const cleanupThreshold = Date.now() - (2 * 60 * 60 * 1000); // saa 2
+  const keysToDelete = [];
+  for (const [k, v] of Object.entries(liveScores)) {
+    if (v.isFinished && v.fetchedAt && v.fetchedAt < cleanupThreshold) {
+      keysToDelete.push(k);
+    }
+  }
+  keysToDelete.forEach(k => delete liveScores[k]);
+  await autoSettleMatches().catch(e => console.warn("autoSettle failed:", e.message));
   if (['results','mikeka','home'].includes(currentTab)) refreshLiveUI();
   if (currentTab === 'home') renderLiveSection();
   if (currentTab === 'mikeka') { const c=el('content'); if(c) renderMikeka(c); }
@@ -728,79 +760,69 @@ async function autoSettleMatches() {
   const pendingMikeka = mikeka.filter(m => m.status === 'PENDING');
   
   for (const mk of pendingMikeka) {
-    // ── Kinga ya double-settle: angalia status ya sasa kutoka DB ────────
-    const { data: mkFresh } = await sb.from('mikeka').select('status').eq('id', mk.id).maybeSingle();
-    if (mkFresh?.status !== 'PENDING') continue; // tayari imesettled na mtu mwingine
+    try {
+      // ── Kinga ya double-settle: angalia status ya sasa kutoka DB ────────
+      const { data: mkFresh } = await sb.from('mikeka').select('status').eq('id', mk.id).maybeSingle();
+      if (mkFresh?.status !== 'PENDING') continue; // tayari imesettled na mtu mwingine
 
-    const matches = mk.matches || [];
-    let needsUpdate = false;
-    
-    for (const match of matches) {
-      if (match.outcome !== 'PENDING') continue;
+      const matches = mk.matches || [];
+      let needsUpdate = false;
       
-      const score = findScore(match.teams);
-      // Settle if: officially finished OR stale live (estimated to be over)
-      const isSettleable = score && (score.isFinished || score._staleLive);
-      if (!isSettleable) continue;
-      
-      // Determine outcome based on market and pick
-      const outcome = determineOutcome(match, score);
-      if (outcome) {
-        await sb.from('matches').update({ outcome }).eq('id', match.id);
-        match.outcome = outcome;
-        needsUpdate = true;
-        // Per-match notification
-        const icon = outcome === 'WIN' ? '✅' : outcome === 'LOSS' ? '❌' : '⬜';
-        const msg = `${icon} ${match.teams}\n${match.market} · ${match.pick} → ${outcome}`;
-        showNotification(`${icon} Match ${outcome}`, msg, outcome === 'WIN' ? 'win' : outcome === 'LOSS' ? 'loss' : 'default');
-        toast(`${icon} ${match.teams.split(' vs ')[0]} — ${outcome}`, outcome==='WIN'?'ok':outcome==='LOSS'?'err':'info');
-      }
-    }
-    
-    // Check if whole mkeka is settled
-    if (needsUpdate) {
-      const { data: freshMatches } = await sb.from('matches').select('*').eq('mkeka_id', mk.id);
-      const allDone = (freshMatches || []).every(m => m.outcome !== 'PENDING');
-      if (allDone) {
-        const hasLoss = (freshMatches || []).some(m => m.outcome === 'LOSS');
-        const allVoid = (freshMatches || []).every(m => m.outcome === 'VOID');
-        const newStatus = hasLoss ? 'LOST' : allVoid ? 'VOID' : 'WON';
-        // Kinga ya double-settle: angalia hali ya sasa kwenye DB
-        const { data: mkFresh } = await sb.from('mikeka').select('status').eq('id', mk.id).maybeSingle();
-        if (mkFresh?.status !== 'PENDING') continue; // tayari imesettled
-        await sb.from('mikeka').update({ status: newStatus }).eq('id', mk.id);
-        
-        const mkName = mk.name || `Mkeka #${mk.id.slice(-4)}`;
-        const wonCount = (freshMatches||[]).filter(m=>m.outcome==='WIN').length;
-        const total = freshMatches.length;
-
-        if (newStatus === 'WON') {
-          // Fetch fresh bankroll from DB to avoid stale state
-          const { data: freshUser } = await sb.from('users').select('bankroll').eq('id', currentUser.id).maybeSingle();
-          const currentBk = freshUser?.bankroll ?? currentUser.bankroll;
-          const payout = (mk.potential_return || 0);
-          await updateUser({ bankroll: currentBk + payout });
-          showNotification('🎉 MKEKA UMESHINDA!', `${mkName}\n${wonCount}/${total} zimeshinda\n+TZS ${fmt(payout - (mk.stake||0))} faida`, 'win');
-          toast(`🎉 MKEKA WON! Payout: TZS ${fmt(payout)}`, 'ok');
-        } else if (newStatus === 'LOST') {
-          // Stake tayari ilipigwa — hakuna kubadilisha bankroll
-          showNotification('❌ Mkeka Umepoteza', `${mkName}\n${wonCount}/${total} zilishinda`, 'loss');
-          toast(`❌ Mkeka Imepotea — ${mkName}`, 'err');
-        } else {
-          // VOID: rudisha stake tu
-          const stakeBack = mk.stake || 0;
-          if (stakeBack > 0) {
-            const { data: freshUser2 } = await sb.from('users').select('bankroll').eq('id', currentUser.id).maybeSingle();
-            const currentBk2 = freshUser2?.bankroll ?? currentUser.bankroll;
-            await updateUser({ bankroll: currentBk2 + stakeBack });
-          }
-          showNotification('⬜ Mkeka VOID', mkName);
-          toast(`⬜ VOID — Stake TZS ${fmt(stakeBack)} imerudishwa`, 'info');
+      for (const match of matches) {
+        if (match.outcome !== 'PENDING') continue;
+        const score = findScore(match.teams);
+        const isSettleable = score && (score.isFinished || score._staleLive);
+        if (!isSettleable) continue;
+        const outcome = determineOutcome(match, score);
+        if (outcome) {
+          await sb.from('matches').update({ outcome }).eq('id', match.id);
+          match.outcome = outcome;
+          needsUpdate = true;
+          const icon = outcome === 'WIN' ? '✅' : outcome === 'LOSS' ? '❌' : '⬜';
+          const msg = `${icon} ${match.teams}\n${match.market} · ${match.pick} → ${outcome}`;
+          showNotification(`${icon} Match ${outcome}`, msg, outcome === 'WIN' ? 'win' : outcome === 'LOSS' ? 'loss' : 'default');
+          toast(`${icon} ${match.teams.split(' vs ')[0]} — ${outcome}`, outcome==='WIN'?'ok':outcome==='LOSS'?'err':'info');
         }
-        await loadData();
-        if (['home','mikeka','results'].includes(currentTab)) showTab(currentTab);
       }
-    }
+      
+      if (needsUpdate) {
+        const { data: freshMatches } = await sb.from('matches').select('*').eq('mkeka_id', mk.id);
+        const allDone = (freshMatches || []).every(m => m.outcome !== 'PENDING');
+        if (allDone) {
+          const hasLoss = (freshMatches || []).some(m => m.outcome === 'LOSS');
+          const allVoid = (freshMatches || []).every(m => m.outcome === 'VOID');
+          const newStatus = hasLoss ? 'LOST' : allVoid ? 'VOID' : 'WON';
+          const { data: mkFresh2 } = await sb.from('mikeka').select('status').eq('id', mk.id).maybeSingle();
+          if (mkFresh2?.status !== 'PENDING') continue;
+          await sb.from('mikeka').update({ status: newStatus }).eq('id', mk.id);
+          const mkName = mk.name || `Mkeka #${mk.id.slice(-4)}`;
+          const wonCount = (freshMatches||[]).filter(m=>m.outcome==='WIN').length;
+          const total = freshMatches.length;
+          if (newStatus === 'WON') {
+            const { data: freshUser } = await sb.from('users').select('bankroll').eq('id', currentUser.id).maybeSingle();
+            const currentBk = freshUser?.bankroll ?? currentUser.bankroll;
+            const payout = (mk.potential_return || 0);
+            await updateUser({ bankroll: currentBk + payout });
+            showNotification('🎉 MKEKA UMESHINDA!', `${mkName}\n${wonCount}/${total} zimeshinda\n+TZS ${fmt(payout - (mk.stake||0))} faida`, 'win');
+            toast(`🎉 MKEKA WON! Payout: TZS ${fmt(payout)}`, 'ok');
+          } else if (newStatus === 'LOST') {
+            showNotification('❌ Mkeka Umepoteza', `${mkName}\n${wonCount}/${total} zilishinda`, 'loss');
+            toast(`❌ Mkeka Imepotea — ${mkName}`, 'err');
+          } else {
+            const stakeBack = mk.stake || 0;
+            if (stakeBack > 0) {
+              const { data: freshUser2 } = await sb.from('users').select('bankroll').eq('id', currentUser.id).maybeSingle();
+              const currentBk2 = freshUser2?.bankroll ?? currentUser.bankroll;
+              await updateUser({ bankroll: currentBk2 + stakeBack });
+            }
+            showNotification('⬜ Mkeka VOID', mkName);
+            toast(`⬜ VOID — Stake TZS ${fmt(stakeBack)} imerudishwa`, 'info');
+          }
+          await loadData();
+          if (['home','mikeka','results'].includes(currentTab)) showTab(currentTab);
+        }
+      }
+    } catch(e) { console.warn('autoSettle error for mkeka', mk.id, e.message); }
   }
 }
 
@@ -1888,7 +1910,7 @@ async function showMatchDetailsModal(teamsStr, eventId) {
         <!-- AI Recommendation for this match -->
         <div style="margin-top:.5rem;background:rgba(0,255,133,.06);border:1px solid rgba(0,255,133,.2);border-radius:14px;padding:1rem">
           <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px">🤖 AI Mapendekezo</div>
-          ${generateMatchAI(s, stats)}
+          ${generateMatchAI(s && s.homeTeam ? s : null, stats)}
         </div>
       `;
     } catch(e) {
@@ -1947,6 +1969,9 @@ function formatForm(formStr) {
 }
 
 function generateMatchAI(score, stats) {
+  if (!score || typeof score !== 'object') {
+    return '<div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start"><span style="font-size:14px">📡</span><span style="font-size:12px;color:#5a9e70">Hakuna data ya live kwa mechi hii kwa sasa.</span></div>';
+  }
   const tips = [];
   const home = score.homeTeam || 'Home';
   const away = score.awayTeam || 'Away';
@@ -2264,6 +2289,23 @@ const LEAGUES=[
   {id:'thailand',name:'Thai League 1',flag:'🇹🇭',region:'Asia'},
   {id:'vleague',name:'V-League Vietnam',flag:'🇻🇳',region:'Asia'},
   {id:'bahrain',name:'Bahrain Premier League',flag:'🇧🇭',region:'Asia'},
+  {id:'azerbaijan',name:'Azerbaycan Premyer Liqasi',flag:'🇦🇿',region:'Asia'},
+  {id:'kazakhstan',name:'Kazakhstan Premier League',flag:'🇰🇿',region:'Asia'},
+  {id:'uzbekistan',name:'Uzbekistan Super League',flag:'🇺🇿',region:'Asia'},
+  {id:'armenia',name:'Armenian Premier League',flag:'🇦🇲',region:'Asia'},
+  {id:'georgia',name:'Georgian Erovnuli Liga',flag:'🇬🇪',region:'Asia'},
+  {id:'finland',name:'Veikkausliiga Finland',flag:'🇫🇮',region:'Ulaya'},
+  {id:'slovakia',name:'Slovak Superliga',flag:'🇸🇰',region:'Ulaya'},
+  {id:'hungary',name:'OTP Bank Liga Hungary',flag:'🇭🇺',region:'Ulaya'},
+  {id:'bulgaria',name:'efbet Liga Bulgaria',flag:'🇧🇬',region:'Ulaya'},
+  {id:'slovenia',name:'Slovenian PrvaLiga',flag:'🇸🇮',region:'Ulaya'},
+  {id:'estonia',name:'Meistriliiga Estonia',flag:'🇪🇪',region:'Ulaya'},
+  {id:'latvia',name:'Virsliga Latvia',flag:'🇱🇻',region:'Ulaya'},
+  {id:'lithuania',name:'A Lyga Lithuania',flag:'🇱🇹',region:'Ulaya'},
+  {id:'iceland',name:'Úrvalsdeild Iceland',flag:'🇮🇸',region:'Ulaya'},
+  {id:'israel',name:'Ligat Ha Al Israel',flag:'🇮🇱',region:'Asia'},
+  {id:'cyprus',name:'1. Division Cyprus',flag:'🇨🇾',region:'Ulaya'},
+  {id:'albania',name:'Kategoria Superiore Albania',flag:'🇦🇱',region:'Ulaya'},
   // KIMATAIFA
   {id:'wcq_africa',name:'World Cup Qualifiers Africa',flag:'🌍',region:'Kimataifa'},
   {id:'wcq_europe',name:'World Cup Qualifiers Europe',flag:'🌍',region:'Kimataifa'},
@@ -2287,7 +2329,7 @@ const MARKETS=[
   'Correct Score','Anytime Scorer','Clean Sheet',
 ];
 const ROLES={owner:'👑 Owner',analyst:'✍️ Analyst (Weka+Ona)',viewer:'👁️ Viewer (Ona Tu)'};
-const uid=()=>crypto.randomUUID();
+const uid=()=>{try{return crypto.randomUUID();}catch(e){return'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16);});}}
 const today=()=>new Date().toISOString().split('T')[0];
 const fmt=(n)=>Math.round(Number(n)).toLocaleString();
 const clamp=(v,a,b)=>Math.min(Math.max(v,a),b);
@@ -2536,10 +2578,10 @@ async function updateUser(updates){
 }
 async function loadData(){
   // Load own mikeka (for stats/reports)
-  const{data:my}=await sb.from('mikeka').select('*,matches(*)').eq('user_id',currentUser.id).order('created_at',{ascending:false});
+  const{data:my}=await sb.from('mikeka').select('*,matches(*)').eq('user_id',currentUser.id).order('date',{ascending:false});
   mikeka=my||[];
   // Load ALL mikeka (for feed + viewer betslips) — everyone sees all
-  const{data:all}=await sb.from('mikeka').select('*,matches(*),users(name,role)').order('created_at',{ascending:false}).limit(100);
+  const{data:all}=await sb.from('mikeka').select('*,matches(*),users(name,role)').order('date',{ascending:false}).limit(100);
   allMikeka=all||[];
 }
 function startRealtime(){
@@ -3041,6 +3083,23 @@ const SPORTSDB_LEAGUES = [
   {id:'thailand',  sportsdbId:'4423', name:'Thai League 1',              flag:'🇹🇭', region:'Asia'},
   {id:'vleague',   sportsdbId:'4424', name:'V-League Vietnam',           flag:'🇻🇳', region:'Asia'},
   {id:'bahrain',   sportsdbId:'4425', name:'Bahrain Premier League',     flag:'🇧🇭', region:'Asia'},
+  {id:'azerbaijan', sportsdbId:'4426', name:'Azerbaycan Premyer Liqasi',    flag:'🇦🇿', region:'Asia'},
+  {id:'kazakhstan', sportsdbId:'4427', name:'Kazakhstan Premier League',    flag:'🇰🇿', region:'Asia'},
+  {id:'uzbekistan', sportsdbId:'4428', name:'Uzbekistan Super League',      flag:'🇺🇿', region:'Asia'},
+  {id:'armenia',    sportsdbId:'4429', name:'Armenian Premier League',      flag:'🇦🇲', region:'Asia'},
+  {id:'georgia',    sportsdbId:'4430', name:'Georgian Erovnuli Liga',       flag:'🇬🇪', region:'Asia'},
+  {id:'finland',    sportsdbId:'4377', name:'Veikkausliiga Finland',        flag:'🇫🇮', region:'Ulaya'},
+  {id:'slovakia',   sportsdbId:'4376', name:'Slovak Superliga',             flag:'🇸🇰', region:'Ulaya'},
+  {id:'hungary',    sportsdbId:'4375', name:'OTP Bank Liga Hungary',        flag:'🇭🇺', region:'Ulaya'},
+  {id:'bulgaria',   sportsdbId:'4369', name:'efbet Liga Bulgaria',          flag:'🇧🇬', region:'Ulaya'},
+  {id:'slovenia',   sportsdbId:'4370', name:'Slovenian PrvaLiga',           flag:'🇸🇮', region:'Ulaya'},
+  {id:'estonia',    sportsdbId:'4431', name:'Meistriliiga Estonia',         flag:'🇪🇪', region:'Ulaya'},
+  {id:'latvia',     sportsdbId:'4432', name:'Virsliga Latvia',              flag:'🇱🇻', region:'Ulaya'},
+  {id:'lithuania',  sportsdbId:'4433', name:'A Lyga Lithuania',             flag:'🇱🇹', region:'Ulaya'},
+  {id:'iceland',    sportsdbId:'4434', name:'Ursvalsdeild Iceland',         flag:'🇮🇸', region:'Ulaya'},
+  {id:'israel',     sportsdbId:'4353', name:'Ligat Ha Al Israel',           flag:'🇮🇱', region:'Asia'},
+  {id:'cyprus',     sportsdbId:'4372', name:'1. Division Cyprus',           flag:'🇨🇾', region:'Ulaya'},
+  {id:'albania',    sportsdbId:'4374', name:'Kategoria Superiore Albania',  flag:'🇦🇱', region:'Ulaya'},
   // KIMATAIFA
   {id:'wcq_africa',sportsdbId:'4489', name:'World Cup Qualifiers Africa',flag:'🌍', region:'Kimataifa'},
   {id:'wcq_europe',sportsdbId:'4490', name:'World Cup Qualifiers Europe',flag:'🌍', region:'Kimataifa'},
@@ -3314,7 +3373,10 @@ async function loadFixMatchesFree(league) {
   if (!matches.length && league.sportsdbId && league.sportsdbId !== '0') {
     try {
       // Tanzania special handling — TPL sometimes listed under different names
+      // Expanded: African leagues that sometimes need fallback fetching
       const isTanzania = ['tpl','crdb_fed','mapinduzi'].includes(league.id);
+      const isKenya = league.id === 'kpl';
+      const isAfricaSpecial = isTanzania || isKenya || ['uganda','rwanda','zambia','ethiopia','senegal','cote','cameroon','angola','drc','zimbabwe','ghana','npfl'].includes(league.id);
       
       // First try: fetch by league sportsdbId directly
       const data = await sportsdbFetch(`eventsday.php?d=${fixSelectedDate}&l=${league.sportsdbId}`);
@@ -3331,13 +3393,17 @@ async function loadFixMatchesFree(league) {
       if (!evs.length) {
         const data2 = await sportsdbFetch(`eventsday.php?d=${fixSelectedDate}&s=Soccer`);
         
-        if (isTanzania) {
-          // Tanzania-specific search — try multiple name variants
-          const tanzaniaKeywords = ['tanzania', 'tanzanian', 'tpl', 'crdb', 'mapinduzi'];
+        if (isAfricaSpecial) {
+          // Africa-specific search — try multiple name variants including country
+          const africaKeywords = isTanzania
+            ? ['tanzania', 'tanzanian', 'tpl', 'crdb', 'mapinduzi']
+            : isKenya
+              ? ['kenya', 'kenyan', 'kpl', 'premier league kenya']
+              : [league.name.toLowerCase().split(' ')[0], (league.country || '').toLowerCase()].filter(Boolean);
           evs = (data2?.events || []).filter(ev => {
             const lgLower = (ev.strLeague || '').toLowerCase();
             const ctryLower = (ev.strCountry || '').toLowerCase();
-            return tanzaniaKeywords.some(kw => lgLower.includes(kw) || ctryLower.includes(kw));
+            return africaKeywords.some(kw => kw.length > 2 && (lgLower.includes(kw) || ctryLower.includes(kw)));
           });
         } else {
           const nameParts = league.name.toLowerCase()
@@ -3359,17 +3425,30 @@ async function loadFixMatchesFree(league) {
         srcLabel = '📡 TheSportsDB';
       }
       
-      // Tanzania last resort: try round-based fetch
-      if (!matches.length && isTanzania) {
+      // Africa last resort: try round-based fetch (next & last round)
+      if (!matches.length && isAfricaSpecial && league.sportsdbId && league.sportsdbId !== '0') {
         try {
+          // Try next round
           const roundData = await sportsdbFetch(`eventsnextleague.php?id=${league.sportsdbId}`);
           const nextEvs = roundData?.events || [];
           if (nextEvs.length > 0) {
             const nowMs = Date.now();
             matches = nextEvs.map(ev => normaliseSportsdb(ev, nowMs)).filter(Boolean);
-            srcLabel = '📡 TheSportsDB (Next)';
+            srcLabel = '📡 TheSportsDB (Inayokuja)';
           }
-        } catch(e2) { console.warn('Tanzania next round fetch:', e2.message); }
+        } catch(e2) { console.warn('Africa next round fetch:', e2.message); }
+        // Try last round if still nothing
+        if (!matches.length) {
+          try {
+            const lastData = await sportsdbFetch(`eventspastleague.php?id=${league.sportsdbId}`);
+            const lastEvs = (lastData?.events || []).slice(0, 10);
+            if (lastEvs.length > 0) {
+              const nowMs = Date.now();
+              matches = lastEvs.map(ev => normaliseSportsdb(ev, nowMs)).filter(Boolean);
+              srcLabel = '📡 TheSportsDB (Iliyopita)';
+            }
+          } catch(e3) { console.warn('Africa last round fetch:', e3.message); }
+        }
       }
     } catch(e) { console.warn('fix src4 TheSportsDB:', e.message); }
   }
@@ -3824,6 +3903,8 @@ function renderPost(c){
       const file = e.target.files && e.target.files[0];
       if(!file){toast('Hakuna picha iliyochaguliwa','warn');return;}
       if(!GEMINI_KEY){toast('Weka OpenRouter API key kwenye Admin kwanza!','err');return;}
+      // ── Angalia ukubwa wa faili — max 5MB ────────────────────────────
+      if(file.size > 5 * 1024 * 1024){toast('⚠️ Picha kubwa mno! Max 5MB — chagua picha nyepesi','err');return;}
       // Show loading state
       const txt = el('ocr-txt');
       const lbl = el('ocr-label');
@@ -4113,6 +4194,25 @@ function renderReports(c){
       const allData = rP==='all' ? mikeka : fil;
       const dateLabel = rP==='week'?'Wiki_hii':rP==='month'?'Mwezi_huu':rP==='year'?'Mwaka_huu':'Yote';
       const fileName = `NJEM_Tipps_Historia_${dateLabel}_${new Date().toISOString().split('T')[0]}`;
+
+      // Helper — works on mobile: tries <a download>, falls back to window.open
+      function triggerDownload(blob, name) {
+        try {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = name;
+          a.style.display = 'none';
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+        } catch(e) {
+          // Fallback for iOS/old browsers: open as data URL in new tab
+          const reader = new FileReader();
+          reader.onload = () => { window.open(reader.result, '_blank'); };
+          reader.readAsDataURL(blob);
+        }
+      }
       
       if (format === 'csv') {
         // Build CSV
@@ -4124,10 +4224,7 @@ function renderReports(c){
           csv += `"${m.name||'Mkeka'}","${m.date}","${m.status}","${m.stake||0}","${m.status==='WON'?m.potential_return||0:0}","${profit2}","${(m.total_odds||1).toFixed(2)}","${matches}","${markets}"\n`;
         });
         const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href=url; a.download=fileName+'.csv';
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        triggerDownload(blob, fileName+'.csv');
         toast('✅ CSV imepakuliwa!','ok');
         
       } else if (format === 'json') {
@@ -4143,10 +4240,7 @@ function renderReports(c){
           }))
         };
         const blob = new Blob([JSON.stringify(exportData, null, 2)], {type:'application/json'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href=url; a.download=fileName+'.json';
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        triggerDownload(blob, fileName+'.json');
         toast('✅ JSON imepakuliwa!','ok');
         
       } else if (format === 'txt') {
@@ -4175,10 +4269,7 @@ function renderReports(c){
         });
         txt += `\n${hr}\n  📞 NJEM MABULA: 0764674285\n${hr}\n`;
         const blob = new Blob([txt], {type:'text/plain;charset=utf-8'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href=url; a.download=fileName+'.txt';
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        triggerDownload(blob, fileName+'.txt');
         toast('✅ Ripoti imepakuliwa!','ok');
       }
       document.getElementById('export-modal')?.remove();
@@ -4474,7 +4565,7 @@ async function renderAdmin(c){
   }
   c.innerHTML=`<div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:1rem">⚙️ Admin</div><div class="center"><div class="spinner"></div></div>`;
   const{data:users}=await sb.from('users').select('*');
-  const{data:allMk}=await sb.from('mikeka').select('*,matches(*),users(name)').order('created_at',{ascending:false});
+  const{data:allMk}=await sb.from('mikeka').select('*,matches(*),users(name)').order('date',{ascending:false});
   const won=(allMk||[]).filter(m=>m.status==='WON'),staked=(allMk||[]).reduce((s,m)=>s+(m.stake||0),0);
   c.innerHTML=`
     <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:1rem">⚙️ Admin Dashboard</div>
