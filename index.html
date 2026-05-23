@@ -2207,15 +2207,15 @@ const SPORTSDB_LEAGUES = [
   {id:'epl',        sportsdbId:'4328', name:'Premier League England',        flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', region:'Ulaya'},
   {id:'championship',sportsdbId:'4329',name:'Championship England',          flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', region:'Ulaya'},
   {id:'league1_eng',sportsdbId:'4330', name:'League One England',            flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', region:'Ulaya'},
-  {id:'scottish',   sportsdbId:'4331', name:'Scottish Premiership',          flag:'🏴󠁧󠁢󠁳󠁣󠁴󠁿', region:'Ulaya'},
+  {id:'scottish',   sportsdbId:'4330', name:'Scottish Premiership',          flag:'🏴󠁧󠁢󠁳󠁣󠁴󠁿', region:'Ulaya', searchName:'Scottish Premiership'},
   {id:'laliga',     sportsdbId:'4335', name:'La Liga Spain',                 flag:'🇪🇸', region:'Ulaya'},
-  {id:'laliga2',    sportsdbId:'4332', name:'La Liga 2 Spain',               flag:'🇪🇸', region:'Ulaya'},
+  {id:'laliga2',    sportsdbId:'4338', name:'La Liga 2 Spain',               flag:'🇪🇸', region:'Ulaya', searchName:'Segunda Division'},
   {id:'bundesliga', sportsdbId:'4331', name:'Bundesliga Germany',            flag:'🇩🇪', region:'Ulaya'},
-  {id:'2bundesliga',sportsdbId:'4333', name:'2. Bundesliga Germany',         flag:'🇩🇪', region:'Ulaya'},
+  {id:'2bundesliga',sportsdbId:'4336', name:'2. Bundesliga Germany',         flag:'🇩🇪', region:'Ulaya', searchName:'2. Bundesliga'},
   {id:'seriea',     sportsdbId:'4332', name:'Serie A Italy',                 flag:'🇮🇹', region:'Ulaya'},
-  {id:'serie_b',    sportsdbId:'4334', name:'Serie B Italy',                 flag:'🇮🇹', region:'Ulaya'},
+  {id:'serie_b',    sportsdbId:'4339', name:'Serie B Italy',                 flag:'🇮🇹', region:'Ulaya', searchName:'Serie B'},
   {id:'ligue1',     sportsdbId:'4334', name:'Ligue 1 France',                flag:'🇫🇷', region:'Ulaya'},
-  {id:'ligue2',     sportsdbId:'4336', name:'Ligue 2 France',                flag:'🇫🇷', region:'Ulaya'},
+  {id:'ligue2',     sportsdbId:'4340', name:'Ligue 2 France',                flag:'🇫🇷', region:'Ulaya', searchName:'Ligue 2'},
   {id:'eredivisie', sportsdbId:'4337', name:'Eredivisie Netherlands',        flag:'🇳🇱', region:'Ulaya'},
   {id:'primeira',   sportsdbId:'4344', name:'Primeira Liga Portugal',        flag:'🇵🇹', region:'Ulaya'},
   {id:'jupiler',    sportsdbId:'4367', name:'Belgian Pro League',            flag:'🇧🇪', region:'Ulaya'},
@@ -2236,7 +2236,7 @@ const SPORTSDB_LEAGUES = [
   {id:'slovakian',  sportsdbId:'4376', name:'Slovak Super Liga',             flag:'🇸🇰', region:'Ulaya'},
   {id:'hungarian',  sportsdbId:'4375', name:'OTP Bank Liga Hungary',         flag:'🇭🇺', region:'Ulaya'},
   {id:'bulgarian',  sportsdbId:'4369', name:'efbet Liga Bulgaria',           flag:'🇧🇬', region:'Ulaya'},
-  {id:'portuguese_b',sportsdbId:'4345',name:'Liga Portugal 2 (B)',           flag:'🇵🇹', region:'Ulaya'},
+  {id:'portuguese_b',sportsdbId:'4350',name:'Liga Portugal 2 (B)',           flag:'🇵🇹', region:'Ulaya', searchName:'Liga Portugal'},
   // UEFA
   {id:'ucl',        sportsdbId:'4480', name:'UEFA Champions League',         flag:'🏆', region:'Ulaya'},
   {id:'uel',        sportsdbId:'4481', name:'UEFA Europa League',            flag:'🔵', region:'Ulaya'},
@@ -2244,7 +2244,7 @@ const SPORTSDB_LEAGUES = [
   {id:'euro',       sportsdbId:'4486', name:'UEFA Euro',                     flag:'🇪🇺', region:'Ulaya'},
   {id:'nations_league',sportsdbId:'4493',name:'UEFA Nations League',         flag:'🇪🇺', region:'Ulaya'},
   // ═══ AMERICAS ═══
-  {id:'mls',        sportsdbId:'4346', name:'MLS USA',                       flag:'🇺🇸', region:'Amerika'},
+  {id:'mls',        sportsdbId:'4346', name:'MLS USA',                       flag:'🇺🇸', region:'Amerika', searchName:'Major League Soccer'},
   {id:'brasileirao',sportsdbId:'4351', name:'Brasileirao Brazil',            flag:'🇧🇷', region:'Amerika'},
   {id:'liga_mx',    sportsdbId:'4350', name:'Liga MX Mexico',                flag:'🇲🇽', region:'Amerika'},
   {id:'argentina',  sportsdbId:'4406', name:'Liga Profesional Argentina',    flag:'🇦🇷', region:'Amerika'},
@@ -2399,7 +2399,7 @@ function renderFixtures(c) {
 }
 
 // ── Fixture card renderer (shared) ───────────────────────────────────
-function renderFixCard(home, away, isLive, isFT, hg, ag, minute, time, leagueId, showBetBtn) {
+function renderFixCard(home, away, isLive, isFT, hg, ag, minute, time, leagueId, showBetBtn, countryTag) {
   const safeH = (home||'').replace(/'/g,"\\'");
   const safeA = (away||'').replace(/'/g,"\\'");
   return `
@@ -2420,6 +2420,7 @@ function renderFixCard(home, away, isLive, isFT, hg, ag, minute, time, leagueId,
         </div>
         <div style="text-align:left"><div style="font-size:13px;font-weight:600">${away}</div></div>
       </div>
+      ${countryTag ? `<div style="font-size:9px;color:var(--muted);text-align:center;margin-top:4px;opacity:.7">${countryTag}</div>` : ''}
       ${showBetBtn && !isFT && home && away ? `
       <div style="margin-top:8px;display:flex;gap:6px">
         <button onclick="window._fixAddBetslip('${safeH} vs ${safeA}','${leagueId}')"
@@ -2492,34 +2493,33 @@ async function loadFixMatchesFree(league) {
   }
 
   // ── Source 3: TheSportsDB (free fallback) ────────────────────────
-  // MUHIMU: Tumia league ID maalum tu — USIFETCH soccer yote (ingeleta ligi zote!)
+  // CRITICAL: Lazima tumia league ID maalum tu — KAMWE USIFETCH soccer yote!
+  // Kufetch soccer yote bila strict filter ndiyo chanzo cha mechi za nchi nyingine kuonekana
   if (!matches.length) {
     try {
       let evs = [];
-      // Try by sportsdbId first
+      // Step 1: Fetch by SPECIFIC league sportsdbId tu — safest
       if (league.sportsdbId) {
         const data = await sportsdbFetch(`eventsday.php?d=${fixSelectedDate}&l=${league.sportsdbId}`);
-        evs = data?.events || [];
+        const raw = data?.events || [];
+        // STRICT: accept only events whose idLeague matches exactly
+        evs = raw.filter(ev => !ev.idLeague || ev.idLeague === league.sportsdbId);
       }
-      // If Tanzania or no results — try search by league name
+      // Step 2: If still empty + searchName — search by event name and filter strictly by date + league
       if (!evs.length && league.searchName) {
-        const data2 = await sportsdbFetch(`searchevents.php?e=${encodeURIComponent(league.searchName)}`);
-        // Filter to only events on the selected date
-        evs = (data2?.event || []).filter(ev => ev.dateEvent === fixSelectedDate);
-      }
-      // Last resort: fetch all soccer and filter STRICTLY by sportsdbId or league name keywords
-      if (!evs.length && league.sportsdbId) {
-        const data3 = await sportsdbFetch(`eventsday.php?d=${fixSelectedDate}&s=Soccer`);
-        const allEvs = data3?.events || [];
-        evs = allEvs.filter(ev => {
-          // Match by league id OR league name keywords (strict 2+ keywords)
-          if (ev.idLeague && ev.idLeague === league.sportsdbId) return true;
-          const leagNameLower = (ev.strLeague || '').toLowerCase();
-          const ourNameParts  = league.name.toLowerCase().replace(/[^a-z0-9 ]/g,'').split(' ').filter(p => p.length > 3);
-          const matchCount = ourNameParts.filter(p => leagNameLower.includes(p)).length;
-          return matchCount >= 2; // need at LEAST 2 matching words to avoid false positives
+        const data2 = await sportsdbFetch(`searchevents.php?e=${encodeURIComponent(league.searchName)}&d=${fixSelectedDate}`);
+        const raw2 = (data2?.event || []).filter(ev => ev.dateEvent === fixSelectedDate);
+        // Only keep if idLeague matches OR country matches
+        const countryKey = (league.name || '').toLowerCase();
+        evs = raw2.filter(ev => {
+          if (ev.idLeague === league.sportsdbId) return true;
+          const evLeague = (ev.strLeague || '').toLowerCase();
+          const ourParts = league.searchName.toLowerCase().replace(/[^a-z0-9 ]/g,'').split(' ').filter(p=>p.length>3);
+          return ourParts.filter(p => evLeague.includes(p)).length >= Math.min(ourParts.length, 2);
         });
       }
+      // NOTE: NO "last resort" all-soccer fetch — ingeleta ligi za nchi nyingine!
+      // Kama hakuna data, tunaonyesha "Hakuna mechi" badala ya mechi za nchi nyingine
       if (evs.length > 0) {
         const nowMs = Date.now();
         matches = evs.map(ev => normaliseSportsdb(ev, nowMs)).filter(Boolean);
@@ -2562,7 +2562,10 @@ async function loadFixMatchesFree(league) {
       m.isLive, m.isFinished,
       m.home, m.away,
       m.minute, m.time,
-      league.id, true
+      league.id, true,
+      m.country && m.league && m.league.toLowerCase() !== league.name.toLowerCase()
+        ? `${m.country} · ${m.league}`
+        : null
     )).join('')}`;
 
   window._fixAddBetslip = (teams, lgId) => {
@@ -2972,7 +2975,12 @@ function renderReports(c){
   ];
 
   c.innerHTML=`
-    <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800;margin-bottom:.9rem">📊 Ripoti za Kina</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.9rem">
+      <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:800">📊 Ripoti za Kina</div>
+      <button onclick="window._downloadReport()" style="display:flex;align-items:center;gap:5px;padding:.45rem .85rem;border-radius:12px;border:1.5px solid rgba(0,255,133,.4);background:rgba(0,255,133,.1);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer">
+        📥 Download PDF
+      </button>
+    </div>
     <div style="display:flex;gap:6px;margin-bottom:.75rem">
       ${[['week','Wiki'],['month','Mwezi'],['year','Mwaka'],['all','Zote']].map(([v,l])=>`
         <button onclick="window._rP('${v}')" style="flex:1;padding:.45rem;border-radius:12px;border:1.5px solid ${rP===v?'var(--accent)':'var(--border)'};background:${rP===v?'rgba(0,255,133,.15)':'transparent'};color:${rP===v?'var(--accent)':'var(--muted)'};font-weight:700;font-size:12px;cursor:pointer">${l}</button>`).join('')}
@@ -3302,6 +3310,351 @@ function renderReports(c){
       }).join('')}`;
   }
 } // ── end renderReports ──
+
+// ══════════════════════════════════════════════════════════════════
+// PROFESSIONAL REPORT DOWNLOAD — HTML → Print/PDF
+// ══════════════════════════════════════════════════════════════════
+window._downloadReport = function() {
+  if (!currentUser) return toast('Ingia kwanza!', 'warn');
+  const now = new Date();
+  const fil = mikeka.filter(m => {
+    const d = new Date(m.date);
+    if (rP === 'week') { const w = new Date(now); w.setDate(now.getDate()-7); return d >= w; }
+    if (rP === 'month') return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
+    if (rP === 'year') return d.getFullYear()===now.getFullYear();
+    return true;
+  });
+  const won = fil.filter(m => m.status === 'WON');
+  const lost = fil.filter(m => m.status === 'LOST');
+  const pending = fil.filter(m => m.status === 'PENDING');
+  const settled = [...won, ...lost];
+  const staked = fil.reduce((s,m) => s+(m.stake||0), 0);
+  const ret = won.reduce((s,m) => s+(m.potential_return||0), 0);
+  const profit = ret - staked;
+  const roi = staked>0 ? ((profit/staked)*100).toFixed(1) : '0.0';
+  const wr = settled.length>0 ? ((won.length/settled.length)*100).toFixed(1) : '0.0';
+  const grade = parseFloat(roi)>=20?'A+':parseFloat(roi)>=10?'A':parseFloat(roi)>=0?'B':parseFloat(roi)>=-15?'C':'D';
+  const gradeColor = parseFloat(roi)>=10?'#00ff85':parseFloat(roi)>=0?'#ffaa00':'#ff4444';
+  const periodLabel = rP==='week'?'Wiki Iliyopita':rP==='month'?'Mwezi Huu':rP==='year'?'Mwaka Huu':'Mikeka Yote';
+
+  // Per-league stats
+  const lgMap = {};
+  fil.forEach(m => {
+    (m.matches||[]).forEach(x => {
+      if (!lgMap[x.league]) lgMap[x.league] = {w:0,l:0,t:0};
+      lgMap[x.league].t++;
+      if (x.outcome==='WIN') lgMap[x.league].w++;
+      if (x.outcome==='LOSS') lgMap[x.league].l++;
+    });
+  });
+
+  // Per-market stats
+  const mkMap = {};
+  fil.forEach(m => {
+    (m.matches||[]).forEach(x => {
+      if (!mkMap[x.market]) mkMap[x.market] = {w:0,l:0,t:0};
+      mkMap[x.market].t++;
+      if (x.outcome==='WIN') mkMap[x.market].w++;
+      if (x.outcome==='LOSS') mkMap[x.market].l++;
+    });
+  });
+
+  const lgRows = Object.entries(lgMap).sort((a,b)=>b[1].t-a[1].t).slice(0,10).map(([id,s]) => {
+    const wr2 = s.t ? ((s.w/s.t)*100).toFixed(0) : 0;
+    const col = parseInt(wr2)>=55?'#00c853':parseInt(wr2)>=40?'#ffaa00':'#ff4444';
+    return `<tr><td>${lgFlag(id)} ${lgName(id)}</td><td>${s.t}</td><td style="color:#00c853">${s.w}</td><td style="color:#ff4444">${s.l}</td><td style="color:${col};font-weight:700">${wr2}%</td></tr>`;
+  }).join('');
+
+  const mkRows = Object.entries(mkMap).sort((a,b)=>(b[1].w/Math.max(b[1].t,1))-(a[1].w/Math.max(a[1].t,1))).slice(0,8).map(([mk,s]) => {
+    const wr2 = s.t ? ((s.w/s.t)*100).toFixed(0) : 0;
+    const col = parseInt(wr2)>=55?'#00c853':parseInt(wr2)>=40?'#ffaa00':'#ff4444';
+    return `<tr><td>${mk}</td><td>${s.t}</td><td style="color:#00c853">${s.w}</td><td style="color:#ff4444">${s.l}</td><td style="color:${col};font-weight:700">${wr2}%</td></tr>`;
+  }).join('');
+
+  const recentMikeka = [...fil].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,10);
+
+  const html = `<!DOCTYPE html>
+<html lang="sw">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>NJEM Tipps — Ripoti ya ${periodLabel}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;background:#fff;color:#1a1a2e;font-size:13px;line-height:1.5}
+  
+  /* HEADER */
+  .report-header{background:linear-gradient(135deg,#05110a 0%,#0c2b17 50%,#051a0c 100%);padding:2rem 2.5rem;display:flex;justify-content:space-between;align-items:center}
+  .report-logo{display:flex;align-items:center;gap:14px}
+  .logo-icon{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#00ff85,#00c965);display:flex;align-items:center;justify-content:center;font-size:24px}
+  .logo-title{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:#00ff85;letter-spacing:-0.5px}
+  .logo-sub{font-size:11px;color:#4a7a5a;margin-top:2px}
+  .report-meta{text-align:right;color:#4a7a5a;font-size:11px}
+  .report-meta .report-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:#e4f0e8;margin-bottom:4px}
+  
+  /* GRADE BANNER */
+  .grade-banner{background:linear-gradient(135deg,#061d0e,#0a2e14);border-bottom:3px solid #00ff85;padding:1.5rem 2.5rem;display:flex;align-items:center;gap:20px}
+  .grade-circle{width:80px;height:80px;border-radius:50%;border:3px solid ${gradeColor};display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:36px;font-weight:800;color:${gradeColor};flex-shrink:0}
+  .grade-info h2{font-family:'Syne',sans-serif;font-size:16px;color:#00ff85;margin-bottom:4px}
+  .grade-info p{font-size:12px;color:#5a9e70}
+  .grade-msg{font-size:13px;font-weight:600;color:${gradeColor};margin-top:6px}
+  
+  /* CONTENT */
+  .content{padding:1.5rem 2.5rem}
+  
+  /* KPI GRID */
+  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.5rem}
+  .kpi-box{background:#f8fff9;border:1.5px solid #e0f0e8;border-radius:12px;padding:1rem;text-align:center}
+  .kpi-icon{font-size:20px;margin-bottom:6px}
+  .kpi-val{font-family:'Syne',sans-serif;font-size:20px;font-weight:800}
+  .kpi-label{font-size:10px;color:#6a9a7a;margin-top:2px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+  
+  /* SECTIONS */
+  .section{margin-bottom:1.5rem}
+  .section-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:800;color:#0c2b17;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid #00ff85;padding-bottom:6px;margin-bottom:1rem;display:flex;align-items:center;gap:8px}
+  
+  /* TABLES */
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{background:#0c2b17;color:#00ff85;padding:.5rem .75rem;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  td{padding:.5rem .75rem;border-bottom:1px solid #f0f8f2}
+  tr:nth-child(even) td{background:#f8fff9}
+  tr:hover td{background:#edfff4}
+  
+  /* WIN/LOSS BARS */
+  .stat-bar-wrap{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .stat-bar-label{font-size:11px;width:90px;flex-shrink:0;color:#444;font-weight:600}
+  .stat-bar-bg{flex:1;height:16px;background:#eee;border-radius:20px;overflow:hidden}
+  .stat-bar-fill{height:100%;border-radius:20px;display:flex;align-items:center;padding-left:6px;font-size:9px;font-weight:700;color:#000}
+  .stat-bar-val{font-size:11px;width:50px;text-align:right;font-weight:700;flex-shrink:0}
+  
+  /* STATUS CHIPS */
+  .chip{display:inline-block;padding:.15rem .55rem;border-radius:20px;font-size:10px;font-weight:700}
+  .chip-won{background:#e8fff2;color:#00a854;border:1px solid #00c853}
+  .chip-lost{background:#fff0f0;color:#d32f2f;border:1px solid #ff4444}
+  .chip-pending{background:#fffbee;color:#e65c00;border:1px solid #ffaa00}
+  
+  /* PROGRESS */
+  .progress-outer{background:#e0f0e8;border-radius:20px;height:12px;overflow:hidden;flex:1}
+  .progress-inner{height:100%;border-radius:20px;background:linear-gradient(90deg,#00c853,#00ff85)}
+  
+  /* MIKEKA TABLE */
+  .mikeka-row td:first-child{font-weight:600}
+  
+  /* FOOTER */
+  .report-footer{background:#0c2b17;padding:1rem 2.5rem;display:flex;justify-content:space-between;align-items:center;margin-top:1rem}
+  .footer-brand{font-family:'Syne',sans-serif;font-size:13px;color:#00ff85;font-weight:700}
+  .footer-note{font-size:10px;color:#4a7a5a;text-align:right}
+  
+  /* DISCLAIMER */
+  .disclaimer{background:#fff8e1;border:1px solid #ffd600;border-radius:8px;padding:.75rem 1rem;font-size:10px;color:#795548;margin-top:1rem;line-height:1.6}
+
+  @media print {
+    body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .no-print{display:none!important}
+    .report-header,.grade-banner,.kpi-box,.section-title{break-inside:avoid}
+    table{break-inside:auto}
+    tr{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+
+<!-- PRINT BUTTON (hidden on print) -->
+<div class="no-print" style="background:#0c2b17;padding:.75rem 2.5rem;display:flex;justify-content:flex-end;gap:10px;position:sticky;top:0;z-index:100">
+  <button onclick="window.print()" style="padding:.5rem 1.25rem;border-radius:10px;border:none;background:#00ff85;color:#000;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px">
+    🖨️ Chapisha / Hifadhi PDF
+  </button>
+  <button onclick="window.close()" style="padding:.5rem 1rem;border-radius:10px;border:1px solid #1a3522;background:transparent;color:#4a7a5a;font-size:13px;cursor:pointer">
+    ✕ Funga
+  </button>
+</div>
+
+<!-- HEADER -->
+<div class="report-header">
+  <div class="report-logo">
+    <div class="logo-icon">📊</div>
+    <div>
+      <div class="logo-title">NJEM Tipps</div>
+      <div class="logo-sub">Mfumo wa Uchambuzi wa Kubeti</div>
+    </div>
+  </div>
+  <div class="report-meta">
+    <div class="report-title">📋 Ripoti ya Mwisho</div>
+    <div>Kipindi: <strong style="color:#e4f0e8">${periodLabel}</strong></div>
+    <div>Mtumiaji: <strong style="color:#e4f0e8">${currentUser.name || 'N/A'}</strong></div>
+    <div>Tarehe: <strong style="color:#e4f0e8">${now.toLocaleDateString('sw-TZ',{year:'numeric',month:'long',day:'numeric'})}</strong></div>
+    <div>Muda: <strong style="color:#e4f0e8">${now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</strong></div>
+  </div>
+</div>
+
+<!-- GRADE BANNER -->
+<div class="grade-banner">
+  <div class="grade-circle">${grade}</div>
+  <div class="grade-info">
+    <h2>🏆 NJEM Analyst Grade</h2>
+    <p>ROI: <strong style="color:${gradeColor}">${roi}%</strong> &nbsp;·&nbsp; Win Rate: <strong style="color:${gradeColor}">${wr}%</strong> &nbsp;·&nbsp; Mikeka: ${fil.length}</p>
+    <div class="grade-msg">${
+      grade==='A+'?'🔥 Mchambuzi wa hali ya juu! Unafanya vizuri sana. Endelea!':
+      grade==='A'?'💪 Unafanya vizuri sana. Mkakati wako unafanya kazi!':
+      grade==='B'?'👍 Uko njia sahihi. Boresha mkakati kidogo zaidi.':
+      grade==='C'?'⚠️ Pumzika kidogo. Tathmini mkakati wako upya.':
+      '🚨 Simama. Reboot mkakati wako kabisa!'
+    }</div>
+  </div>
+</div>
+
+<div class="content">
+
+<!-- KPI GRID -->
+<div class="kpi-grid">
+  <div class="kpi-box">
+    <div class="kpi-icon">📋</div>
+    <div class="kpi-val" style="color:#1a1a2e">${fil.length}</div>
+    <div class="kpi-label">Mikeka Yote</div>
+  </div>
+  <div class="kpi-box">
+    <div class="kpi-icon">✅</div>
+    <div class="kpi-val" style="color:#00a854">${won.length}</div>
+    <div class="kpi-label">Zilishinda</div>
+  </div>
+  <div class="kpi-box">
+    <div class="kpi-icon">❌</div>
+    <div class="kpi-val" style="color:#d32f2f">${lost.length}</div>
+    <div class="kpi-label">Zilipoteza</div>
+  </div>
+  <div class="kpi-box">
+    <div class="kpi-icon">🎯</div>
+    <div class="kpi-val" style="color:${parseFloat(wr)>=55?'#00a854':parseFloat(wr)>=40?'#e65c00':'#d32f2f'}">${wr}%</div>
+    <div class="kpi-label">Win Rate</div>
+  </div>
+  <div class="kpi-box">
+    <div class="kpi-icon">💸</div>
+    <div class="kpi-val" style="color:#1a1a2e;font-size:14px">TZS ${fmt(staked)}</div>
+    <div class="kpi-label">Total Staked</div>
+  </div>
+  <div class="kpi-box">
+    <div class="kpi-icon">💰</div>
+    <div class="kpi-val" style="color:#00a854;font-size:14px">TZS ${fmt(ret)}</div>
+    <div class="kpi-label">Total Return</div>
+  </div>
+  <div class="kpi-box">
+    <div class="kpi-icon">${profit>=0?'📈':'📉'}</div>
+    <div class="kpi-val" style="color:${profit>=0?'#00a854':'#d32f2f'};font-size:14px">${profit>=0?'+':''}TZS ${fmt(Math.abs(profit))}</div>
+    <div class="kpi-label">Net Profit/Loss</div>
+  </div>
+  <div class="kpi-box">
+    <div class="kpi-icon">🔄</div>
+    <div class="kpi-val" style="color:${parseFloat(roi)>=0?'#00a854':'#d32f2f'}">${roi}%</div>
+    <div class="kpi-label">ROI</div>
+  </div>
+</div>
+
+<!-- WIN RATE BAR -->
+<div class="section">
+  <div class="section-title">📊 Muhtasari wa Matokeo</div>
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+    <span style="font-size:12px;font-weight:700;width:80px">Win Rate</span>
+    <div class="progress-outer">
+      <div class="progress-inner" style="width:${Math.min(parseFloat(wr)||0,100)}%"></div>
+    </div>
+    <span style="font-size:13px;font-weight:800;color:${parseFloat(wr)>=55?'#00a854':'#d32f2f'};width:45px;text-align:right">${wr}%</span>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem">
+    <div style="background:#e8fff2;border:1px solid #00c853;border-radius:10px;padding:.75rem;text-align:center">
+      <div style="font-size:22px;font-weight:800;color:#00a854">${won.length}</div>
+      <div style="font-size:10px;color:#4a7a5a;text-transform:uppercase;font-weight:700">✅ Zilishinda</div>
+    </div>
+    <div style="background:#fffbee;border:1px solid #ffaa00;border-radius:10px;padding:.75rem;text-align:center">
+      <div style="font-size:22px;font-weight:800;color:#e65c00">${pending.length}</div>
+      <div style="font-size:10px;color:#795548;text-transform:uppercase;font-weight:700">⏳ Pending</div>
+    </div>
+    <div style="background:#fff0f0;border:1px solid #ff4444;border-radius:10px;padding:.75rem;text-align:center">
+      <div style="font-size:22px;font-weight:800;color:#d32f2f">${lost.length}</div>
+      <div style="font-size:10px;color:#6a0000;text-transform:uppercase;font-weight:700">❌ Zilipoteza</div>
+    </div>
+  </div>
+</div>
+
+${lgRows ? `
+<!-- LEAGUE ANALYSIS -->
+<div class="section">
+  <div class="section-title">🌍 Uchambuzi wa Ligi</div>
+  <table>
+    <thead><tr><th>Ligi</th><th>Mechi</th><th>Win</th><th>Loss</th><th>Win%</th></tr></thead>
+    <tbody>${lgRows}</tbody>
+  </table>
+</div>` : ''}
+
+${mkRows ? `
+<!-- MARKET ANALYSIS -->
+<div class="section">
+  <div class="section-title">🎯 Uchambuzi wa Markets</div>
+  <table>
+    <thead><tr><th>Market</th><th>Mechi</th><th>Win</th><th>Loss</th><th>Win%</th></tr></thead>
+    <tbody>${mkRows}</tbody>
+  </table>
+</div>` : ''}
+
+${recentMikeka.length ? `
+<!-- RECENT BETSLIPS -->
+<div class="section">
+  <div class="section-title">📋 Mikeka ya Hivi Karibuni (10 za Mwisho)</div>
+  <table>
+    <thead><tr><th>Tarehe</th><th>Jina</th><th>Mechi</th><th>Odds</th><th>Stake (TZS)</th><th>Return (TZS)</th><th>Hali</th></tr></thead>
+    <tbody>
+      ${recentMikeka.map(m => `<tr class="mikeka-row">
+        <td>${m.date}</td>
+        <td>${m.name||'Mkeka #'+m.id.slice(-4)}</td>
+        <td>${(m.matches||[]).length}</td>
+        <td>${(m.total_odds||1).toFixed(2)}x</td>
+        <td>${fmt(m.stake||0)}</td>
+        <td>${fmt(m.potential_return||0)}</td>
+        <td><span class="chip chip-${m.status==='WON'?'won':m.status==='LOST'?'lost':'pending'}">${m.status}</span></td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+</div>` : ''}
+
+<!-- DISCLAIMER -->
+<div class="disclaimer">
+  ⚠️ <strong>Onyo la Kisheria:</strong> Ripoti hii ni kwa madhumuni ya kujifunza na uchambuzi binafsi tu. Kubeti kuna hatari ya kupoteza pesa. Weka tu pesa unayoweza kupoteza. NJEM Tipps haichukui jukumu la maamuzi ya kubeti.
+</div>
+
+</div><!-- end .content -->
+
+<!-- FOOTER -->
+<div class="report-footer">
+  <div>
+    <div class="footer-brand">⚡ NJEM Tipps v2.0</div>
+    <div style="font-size:10px;color:#4a7a5a;margin-top:2px">Mfumo wa Uchambuzi wa Kubeti — NJEM System</div>
+  </div>
+  <div class="footer-note">
+    <div>Imetolewa: ${now.toLocaleString('sw-TZ')}</div>
+    <div>Mtumiaji: ${currentUser.name || '—'} &nbsp;·&nbsp; Kipindi: ${periodLabel}</div>
+    <div style="margin-top:4px;color:#00ff85;font-weight:700">Mechi ${fil.length} · Profit ${profit>=0?'+':''}TZS ${fmt(Math.abs(profit))} · ROI ${roi}%</div>
+  </div>
+</div>
+
+</body>
+</html>`;
+
+  // Open in new tab
+  const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, '_blank');
+  if (!win) {
+    // Fallback: download directly
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `NJEM_Report_${currentUser.name||'report'}_${now.toISOString().split('T')[0]}.html`;
+    a.click();
+    toast('📥 Ripoti imepakuliwa!', 'ok');
+  } else {
+    toast('📊 Ripoti imefunguliwa — bonyeza "Chapisha" kuhifadhi PDF!', 'ok');
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+};
 
 // ADMIN
 async function renderAdmin(c){
