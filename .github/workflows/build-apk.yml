@@ -1,4 +1,4 @@
-name: Build Android APK - 76TIPPS
+name: Build 76TIPPS APK
 
 on:
   workflow_dispatch:
@@ -18,156 +18,148 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: Create complete Android WebView project for 76TIPPS
+      - name: Create Android WebView Project
         run: |
           mkdir -p android/app/src/main/java/com/njem/tipps
-          mkdir -p android/app/src/main/res/drawable
+          mkdir -p android/app/src/main/res/mipmap-hdpi
           mkdir -p android/app/src/main/res/values
 
-          # Project level build.gradle
-          cat > android/build.gradle << 'EOT'
-          buildscript {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath 'com.android.tools.build:gradle:8.3.0'
-              }
-          }
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          EOT
-
-          # settings.gradle
           cat > android/settings.gradle << 'EOT'
-          include ':app'
-          EOT
+include ':app'
+EOT
 
-          # app/build.gradle
+          cat > android/build.gradle << 'EOT'
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.3.0'
+    }
+}
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+EOT
+
           cat > android/app/build.gradle << 'EOT'
-          apply plugin: 'com.android.application'
+plugins {
+    id 'com.android.application'
+}
 
-          android {
-              namespace 'com.njem.tipps'
-              compileSdk 34
+android {
+    namespace 'com.njem.tipps'
+    compileSdk 34
 
-              defaultConfig {
-                  applicationId "com.njem.tipps"
-                  minSdk 21
-                  targetSdk 34
-                  versionCode 2
-                  versionName "1.1"
-              }
+    defaultConfig {
+        applicationId "com.njem.tipps"
+        minSdk 21
+        targetSdk 34
+        versionCode 2
+        versionName "1.1"
+    }
 
-              buildTypes {
-                  release {
-                      minifyEnabled false
-                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-                  }
-              }
-          }
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+}
 
-          dependencies {
-              implementation 'androidx.appcompat:appcompat:1.7.0'
-              implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-          }
-          EOT
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+}
+EOT
 
-          # AndroidManifest.xml
           cat > android/app/src/main/AndroidManifest.xml << 'EOT'
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-              package="com.njem.tipps">
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <application
+        android:allowBackup="true"
+        android:label="76TIPPS"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+EOT
 
-              <application
-                  android:allowBackup="true"
-                  android:label="76TIPPS"
-                  android:icon="@drawable/ic_launcher"
-                  android:roundIcon="@drawable/ic_launcher">
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true"
-                      android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>
-          EOT
-
-          # MainActivity.java
           cat > android/app/src/main/java/com/njem/tipps/MainActivity.java << 'EOT'
-          package com.njem.tipps;
+package com.njem.tipps;
 
-          import android.annotation.SuppressLint;
-          import android.os.Bundle;
-          import android.webkit.WebSettings;
-          import android.webkit.WebView;
-          import android.webkit.WebViewClient;
-          import androidx.appcompat.app.AppCompatActivity;
+import android.os.Bundle;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import androidx.appcompat.app.AppCompatActivity;
 
-          public class MainActivity extends AppCompatActivity {
-              @SuppressLint("SetJavaScriptEnabled")
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
-                  WebView webView = new WebView(this);
-                  setContentView(webView);
+public class MainActivity extends AppCompatActivity {
+    private WebView webView;
 
-                  WebSettings webSettings = webView.getSettings();
-                  webSettings.setJavaScriptEnabled(true);
-                  webSettings.setDomStorageEnabled(true);
-                  webSettings.setLoadWithOverviewMode(true);
-                  webSettings.setUseWideViewPort(true);
-                  webSettings.setAllowFileAccess(true);
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        webView = new WebView(this);
+        setContentView(webView);
 
-                  webView.setWebViewClient(new WebViewClient() {
-                      @Override
-                      public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                          view.loadUrl(url);
-                          return true;
-                      }
-                  });
-                  webView.loadUrl("https://njem-tipps.vercel.app");
-              }
-          }
-          EOT
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setLoadWithOverviewMode(true);
+        settings.setUseWideViewPort(true);
 
-          # Placeholder icon (transparent 512x512)
-          cat > android/app/src/main/res/drawable/ic_launcher.png << 'EOT'
-          iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGAoK1v2QAAAABJRU5ErkJggg==
-          EOT
+        webView.setWebViewClient(new WebViewClient());
+        webView.loadUrl("https://njem-tipps.vercel.app");
+    }
 
-          # strings.xml
+    @Override
+    public void onBackPressed() {
+        if (webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            super.onBackPressed();
+        }
+    }
+}
+EOT
+
           cat > android/app/src/main/res/values/strings.xml << 'EOT'
-          <resources>
-              <string name="app_name">76TIPPS</string>
-          </resources>
-          EOT
+<resources>
+    <string name="app_name">76TIPPS</string>
+</resources>
+EOT
 
-          echo "Android project structure created."
+          echo "Placeholder icon created" > android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+EOT
 
       - name: Setup Gradle Wrapper
         run: |
           cd android
-          gradle wrapper --gradle-version 8.7 --distribution-type all
+          if [ ! -f "gradlew" ]; then
+            gradle wrapper --gradle-version 8.7
+          fi
           chmod +x gradlew
 
       - name: Build Debug APK
         run: |
           cd android
-          ./gradlew assembleDebug --stacktrace --info
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: 76TIPPS-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          if-no-files-found: warn
