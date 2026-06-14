@@ -16,27 +16,23 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'gradle'
 
-      - name: Create simple WebView project for 76TIPPS
+      - name: Create complete Android WebView project for 76TIPPS
         run: |
           mkdir -p android/app/src/main/java/com/njem/tipps
           mkdir -p android/app/src/main/res/drawable
           mkdir -p android/app/src/main/res/values
 
-          # settings.gradle
-          cat > android/settings.gradle << 'EOF'
-          include ':app'
-          EOF
-
-          # build.gradle (project level)
-          cat > android/build.gradle << 'EOF'
+          # Project level build.gradle
+          cat > android/build.gradle << 'EOT'
           buildscript {
               repositories {
                   google()
                   mavenCentral()
               }
               dependencies {
-                  classpath 'com.android.tools.build:gradle:8.1.0'
+                  classpath 'com.android.tools.build:gradle:8.3.0'
               }
           }
           allprojects {
@@ -45,10 +41,15 @@ jobs:
                   mavenCentral()
               }
           }
-          EOF
+          EOT
+
+          # settings.gradle
+          cat > android/settings.gradle << 'EOT'
+          include ':app'
+          EOT
 
           # app/build.gradle
-          cat > android/app/build.gradle << 'EOF'
+          cat > android/app/build.gradle << 'EOT'
           apply plugin: 'com.android.application'
 
           android {
@@ -59,34 +60,39 @@ jobs:
                   applicationId "com.njem.tipps"
                   minSdk 21
                   targetSdk 34
-                  versionCode 1
-                  versionName "1.0"
+                  versionCode 2
+                  versionName "1.1"
               }
 
               buildTypes {
                   release {
                       minifyEnabled false
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
                   }
               }
           }
 
           dependencies {
-              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'androidx.appcompat:appcompat:1.7.0'
               implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
           }
-          EOF
+          EOT
 
           # AndroidManifest.xml
-          cat > android/app/src/main/AndroidManifest.xml << 'EOF'
+          cat > android/app/src/main/AndroidManifest.xml << 'EOT'
           <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.njem.tipps">
+
               <application
                   android:allowBackup="true"
                   android:label="76TIPPS"
-                  android:icon="@drawable/ic_launcher">
-                  <activity android:name=".MainActivity"
+                  android:icon="@drawable/ic_launcher"
+                  android:roundIcon="@drawable/ic_launcher">
+                  <activity
+                      android:name=".MainActivity"
                       android:exported="true"
-                      android:configChanges="orientation|screenSize">
+                      android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
@@ -94,12 +100,13 @@ jobs:
                   </activity>
               </application>
           </manifest>
-          EOF
+          EOT
 
           # MainActivity.java
-          cat > android/app/src/main/java/com/njem/tipps/MainActivity.java << 'EOF'
+          cat > android/app/src/main/java/com/njem/tipps/MainActivity.java << 'EOT'
           package com.njem.tipps;
 
+          import android.annotation.SuppressLint;
           import android.os.Bundle;
           import android.webkit.WebSettings;
           import android.webkit.WebView;
@@ -107,6 +114,7 @@ jobs:
           import androidx.appcompat.app.AppCompatActivity;
 
           public class MainActivity extends AppCompatActivity {
+              @SuppressLint("SetJavaScriptEnabled")
               @Override
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
@@ -118,43 +126,48 @@ jobs:
                   webSettings.setDomStorageEnabled(true);
                   webSettings.setLoadWithOverviewMode(true);
                   webSettings.setUseWideViewPort(true);
+                  webSettings.setAllowFileAccess(true);
 
-                  webView.setWebViewClient(new WebViewClient());
+                  webView.setWebViewClient(new WebViewClient() {
+                      @Override
+                      public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                          view.loadUrl(url);
+                          return true;
+                      }
+                  });
                   webView.loadUrl("https://njem-tipps.vercel.app");
               }
           }
-          EOF
+          EOT
 
-          # Simple placeholder icon (you can replace later)
-          echo "Placeholder icon" > android/app/src/main/res/drawable/ic_launcher.png
+          # Placeholder icon (transparent 512x512)
+          cat > android/app/src/main/res/drawable/ic_launcher.png << 'EOT'
+          iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGAoK1v2QAAAABJRU5ErkJggg==
+          EOT
 
           # strings.xml
-          cat > android/app/src/main/res/values/strings.xml << 'EOF'
+          cat > android/app/src/main/res/values/strings.xml << 'EOT'
           <resources>
               <string name="app_name">76TIPPS</string>
           </resources>
-          EOF
+          EOT
 
-      - name: Make gradlew executable
-        run: |
-          cd android
-          chmod +x gradlew || echo "gradlew not yet created, will use wrapper"
+          echo "Android project structure created."
 
       - name: Setup Gradle Wrapper
         run: |
           cd android
-          if [ ! -f "gradlew" ]; then
-            echo "Creating Gradle wrapper..."
-            gradle wrapper --gradle-version 8.5
-          fi
+          gradle wrapper --gradle-version 8.7 --distribution-type all
+          chmod +x gradlew
 
       - name: Build Debug APK
         run: |
           cd android
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --stacktrace --info
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: 76TIPPS-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
