@@ -3,7 +3,7 @@
   <uses-permission android:name="android.permission.INTERNET"/>
   <application
     android:label="76TIPPS"
-    android:icon="@mipmap/ic_launcher"
+    android:icon="@android:color/black"
     android:theme="@style/AppTheme">
     <activity
       android:name=".MainActivity"
