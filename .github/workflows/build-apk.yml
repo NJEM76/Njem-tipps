@@ -1,32 +1,153 @@
 name: Build 76TIPPS APK
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:   # Inaruhusu kurun manually kutoka GitHub UI
 
 jobs:
-  build:
+  build-apk:
     runs-on: ubuntu-latest
+    
     steps:
-      - uses: actions/checkout@v4
+      # ── Step 1: Chukua code yako ──────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      # ── Step 2: Weka Node.js ──────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ── Step 3: Weka Java (inahitajika kwa APK signing) ───
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.7'
+      # ── Step 4: Install Bubblewrap (PWA → APK tool) ───────
+      - name: Install Bubblewrap CLI
+        run: npm install -g @bubblewrap/cli
 
-      - name: Build APK
+      # ── Step 5: Pata URL ya GitHub Pages yako ────────────
+      - name: Detect GitHub Pages URL
+        id: detect_url
         run: |
-          cd android
-          gradle wrapper --gradle-version 8.7
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          REPO="${{ github.repository }}"
+          OWNER="${{ github.repository_owner }}"
+          REPO_NAME="${{ github.event.repository.name }}"
+          
+          # Kama repo name ni same na owner → root URL
+          if [ "$REPO_NAME" = "$OWNER.github.io" ]; then
+            SITE_URL="https://${OWNER}.github.io"
+          else
+            SITE_URL="https://${OWNER}.github.io/${REPO_NAME}"
+          fi
+          
+          echo "SITE_URL=$SITE_URL" >> $GITHUB_OUTPUT
+          echo "✅ Site URL: $SITE_URL"
 
-      - uses: actions/upload-artifact@v4
+      # ── Step 6: Andika twa.json (Bubblewrap config) ───────
+      - name: Create Bubblewrap config
+        run: |
+          SITE_URL="${{ steps.detect_url.outputs.SITE_URL }}"
+          
+          cat > twa-manifest.json << EOF
+          {
+            "packageId": "com.76tipps.app",
+            "host": "$(echo $SITE_URL | sed 's|https://||')",
+            "name": "76TIPPS",
+            "launcherName": "76TIPPS",
+            "display": "standalone",
+            "orientation": "portrait",
+            "themeColor": "#00ff85",
+            "navigationColor": "#05110a",
+            "navigationColorDark": "#05110a",
+            "navigationDividerColor": "#1a3522",
+            "navigationDividerColorDark": "#1a3522",
+            "backgroundColor": "#05110a",
+            "startUrl": "/",
+            "iconUrl": "${SITE_URL}/icon-512.png",
+            "maskableIconUrl": "${SITE_URL}/maskable-512.png",
+            "appVersionName": "2.0",
+            "appVersionCode": 2,
+            "signingMode": "none",
+            "fullScopeUrl": "${SITE_URL}/",
+            "minSdkVersion": 19,
+            "targetSdkVersion": 34,
+            "webManifestUrl": "${SITE_URL}/manifest.json",
+            "shortcuts": []
+          }
+          EOF
+          
+          echo "✅ twa-manifest.json created"
+          cat twa-manifest.json
+
+      # ── Step 7: Initialize Bubblewrap project ─────────────
+      - name: Initialize Bubblewrap
+        run: |
+          bubblewrap init --manifest="${{ steps.detect_url.outputs.SITE_URL }}/manifest.json" \
+            --directory=./twa-project || true
+          
+          # Kama init imeshindwa, tengeneza manually
+          if [ ! -d "./twa-project" ]; then
+            mkdir -p ./twa-project
+            cp twa-manifest.json ./twa-project/twa-manifest.json
+          fi
+
+      # ── Step 8: Build APK ─────────────────────────────────
+      - name: Build APK
+        working-directory: ./twa-project
+        run: |
+          bubblewrap build --skipPwaValidation || \
+          (echo "Bubblewrap build failed, trying gradle directly..." && \
+           ./gradlew assembleRelease --no-daemon)
+
+      # ── Step 9: Tafuta APK iliyoundwa ─────────────────────
+      - name: Find built APK
+        id: find_apk
+        run: |
+          APK_PATH=$(find . -name "*.apk" -type f | head -1)
+          echo "APK_PATH=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "✅ APK found at: $APK_PATH"
+          ls -la "$APK_PATH" 2>/dev/null || echo "❌ APK not found"
+
+      # ── Step 10: Upload APK kama artifact ─────────────────
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: 76TIPPS-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: 76TIPPS-APK-v2.0
+          path: |
+            **/*.apk
+          if-no-files-found: warn
           retention-days: 30
+
+      # ── Step 11: Create GitHub Release ────────────────────
+      - name: Create Release with APK
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        with:
+          tag_name: v2.0.${{ github.run_number }}
+          name: "76TIPPS v2.0 (Build ${{ github.run_number }})"
+          body: |
+            ## 76TIPPS APK — Build ${{ github.run_number }}
+            
+            ### Mabadiliko:
+            - ✅ Icons mpya za 76TIPPS
+            - ✅ PWA → APK optimized
+            - ✅ Dark green theme
+            
+            ### Jinsi ya kuinstall:
+            1. Download APK hapa chini
+            2. Nenda Settings → Security → Unknown Sources → ON
+            3. Fungua APK uifungue
+            
+            **Site:** ${{ steps.detect_url.outputs.SITE_URL }}
+          files: |
+            **/*.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
